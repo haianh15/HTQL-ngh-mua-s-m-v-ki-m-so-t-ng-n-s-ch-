@@ -43,14 +43,13 @@ export function canApproveStep(user: User | null, pr: PurchaseRequest, ds: Deleg
   const step = pr.approvalTimeline[pr.currentStepIndex];
   if (!step || step.status !== 'PENDING') return false;
   const direct = user.roles.includes(step.assignedRole) &&
-    (user.branchId === pr.branchId || (user.branchId === 'HQ' && ['finance','bod','admin'].some(r => user.roles.includes(r as any)))) &&
+    (user.branchId === pr.branchId || user.roles.includes('bod')) &&
     (step.assignedRole !== 'dept_head' || user.departmentId === pr.departmentId);
   return direct || eligibleDelegation(user, pr, step.assignedRole, ds);
 }
 export function canSeeBranch(user: User | null, branchId: string): boolean {
   if (!user || !user.isActive) return false;
-  if (user.roles.includes('admin') || user.roles.includes('bod')) return true;
-  if (user.branchId === 'HQ' && user.roles.some(r => ['finance','procurement','accountant'].includes(r))) return true;
+  if (user.roles.includes('bod')) return true;
   return user.branchId === branchId;
 }
 export function reserveBudget(budget: BudgetPool, amount: number): BudgetPool {
@@ -80,4 +79,52 @@ export function transferBudget(from: BudgetPool, to: BudgetPool, amount: number)
     { ...from, adjustments: (from.adjustments || 0) - amount },
     { ...to, adjustments: (to.adjustments || 0) + amount },
   ];
+}
+
+// Các quyền hiển thị là quy định tách biệt với bước phê duyệt nghiệp vụ.
+// Chỉ BOD/Tổng Giám đốc được xem toàn bộ HQ và năm chi nhánh.
+export function canViewAllRegions(user: User | null): boolean {
+  return !!user?.isActive && user.roles.includes('bod');
+}
+export function canViewDashboard(user: User | null): boolean {
+  return !!user?.isActive && user.roles.some(r =>
+    ['bod', 'branch_director', 'finance', 'procurement', 'accountant'].includes(r)
+  );
+}
+export function canReadRequest(user: User | null, pr: PurchaseRequest): boolean {
+  if (!user?.isActive || !canSeeBranch(user, pr.branchId)) return false;
+  if (user.roles.includes('bod')) return true;
+  if (user.roles.includes('branch_director')) return true; // Chỉ chi nhánh được giao
+  if (user.roles.some(r => ['finance', 'procurement', 'accountant'].includes(r))) return true;
+  if (user.roles.includes('dept_head')) return pr.departmentId === user.departmentId || pr.createdById === user.id;
+  if (user.roles.includes('requester')) return pr.createdById === user.id;
+  return false; // admin không được tự động đọc hồ sơ của nhân viên
+}
+export type ProtectedScreen =
+  | 'DASHBOARD' | 'PR_LIST' | 'PR_CREATE' | 'PR_EDIT' | 'PR_DETAIL'
+  | 'APPROVAL_QUEUE' | 'EXECUTION_LIST' | 'BUDGET_OVERVIEW' | 'BUDGET_TRANSFERS'
+  | 'BUDGET_WAITING_PR' | 'RECONCILIATION_IMPORT' | 'REPORTS' | 'NOTIFICATIONS'
+  | 'ADMIN_MANAGEMENT' | 'FORBIDDEN_403' | 'AUTH_LOGIN' | 'AUTH_MFA' | 'AUTH_FORGOT_PW';
+export function canAccessScreen(user: User | null, screen: ProtectedScreen): boolean {
+  if (!user?.isActive) return false;
+  if (screen === 'FORBIDDEN_403' || screen === 'NOTIFICATIONS') return true;
+  if (screen === 'ADMIN_MANAGEMENT') return user.roles.includes('admin');
+  if (screen === 'DASHBOARD') return canViewDashboard(user);
+  if (['BUDGET_OVERVIEW', 'BUDGET_TRANSFERS', 'BUDGET_WAITING_PR'].includes(screen))
+    return user.roles.some(r => ['bod', 'finance'].includes(r));
+  if (screen === 'REPORTS') return user.roles.some(r => ['bod', 'finance', 'accountant', 'procurement', 'branch_director'].includes(r));
+  if (screen === 'EXECUTION_LIST') return user.roles.some(r => ['procurement', 'finance', 'bod'].includes(r));
+  if (screen === 'RECONCILIATION_IMPORT') return user.roles.some(r => ['accountant', 'finance', 'bod'].includes(r));
+  if (screen === 'APPROVAL_QUEUE') return user.roles.some(r => ['dept_head', 'branch_director', 'finance', 'bod'].includes(r));
+  if (['PR_LIST', 'PR_DETAIL'].includes(screen)) return !user.roles.every(r => r === 'admin');
+  if (['PR_CREATE', 'PR_EDIT'].includes(screen)) return user.roles.some(r =>
+    ['requester', 'dept_head', 'branch_director', 'finance', 'procurement', 'accountant', 'bod'].includes(r)
+  );
+  return false;
+}
+export function defaultScreenFor(user: User): ProtectedScreen {
+  if (user.roles.includes('admin') && user.roles.length === 1) return 'ADMIN_MANAGEMENT';
+  if (user.roles.includes('requester') && user.roles.length === 1) return 'PR_LIST';
+  if (user.roles.includes('dept_head') && !user.roles.some(r => ['bod','branch_director','finance'].includes(r))) return 'APPROVAL_QUEUE';
+  return canViewDashboard(user) ? 'DASHBOARD' : 'PR_LIST';
 }

@@ -51,3 +51,20 @@ Bộ kiểm thử bao gồm: ngân sách 100/70/50, chuyển giữ→cam kết�
 Xuất Excel `.xlsx` và nhập `.xlsx` chưa được hỗ trợ; bản hiện tại xuất/nhập **CSV**, có thể mở/chỉnh sửa bằng Excel. Chức năng đổi/khôi phục mật khẩu thật đang khóa để không báo sai là đã đổi. Một số cấu hình như phân bổ ngân sách đầu năm đầy đủ vẫn cần triển khai nghiệp vụ backend.
 
 **Lưu ý môi trường tạo bản sửa:** Không thể chạy Vite và kiểm thử browser E2E tại môi trường này do không tải được dependencies npm từ registry (DNS). Đã kiểm tra cú pháp 33 file TypeScript/TSX và chạy 8 bài test độc lập cho các quy tắc tài chính. Hãy chạy `npm install && npm run dev` trên máy có Internet để kiểm thử giao diện toàn luồng.
+
+## Bản cập nhật V3 — Quyền theo chức danh và khu vực (28/10/2026)
+
+Xem `PHAN_QUYEN_V3.md` để biết toàn bộ ma trận quyền. Điểm thay đổi chính:
+- Nhân viên đề nghị: vào `Đề nghị mua sắm` ngay sau login, không còn dashboard, ngân sách và báo cáo; chỉ xem phiếu của mình.
+- Trưởng phòng: vào `Hàng chờ phê duyệt`; xem phiếu thuộc phòng ban và các yêu cầu cần duyệt, không có dashboard toàn công ty.
+- Tài chính / Mua hàng / Kế toán: dashboard, hồ sơ và báo cáo của **khu vực được gán**. Tài khoản HQ không còn mặc định truy cập năm chi nhánh.
+- Giám đốc chi nhánh: chỉ vùng chi nhánh của mình.
+- Ban Giám đốc (`bod`): có thể xem toàn công ty và chọn bộ lọc HQ / 5 chi nhánh.
+- Quản trị viên: mặc định chỉ màn quản trị, danh sách người dùng khu vực mình quản lý; không có quyền xem ngân sách toàn công ty.
+- Khi người dùng truy cập trang không thuộc vai trò, router hiển thị 403 và dữ liệu danh sách cũng bị lọc theo vai trò.
+
+**Khác biệt quan trọng:** đây vẫn là bản React prototype dùng `localStorage` và tài khoản demo; backend production phải áp dụng cùng quy tắc trên mỗi API và chỉ trả về dữ liệu đúng khu vực. Không thể xem frontend là biện pháp bảo vệ dữ liệu an toàn.
+
+**Cập nhật GitHub bằng Windows:** giải nén ZIP, nhấp đúp `CAP_NHAT_GITHUB_WINDOWS.bat` (yêu cầu Git for Windows và quyền push). File thực hiện clone repository hiện có, chép mã nguồn mới rồi tạo commit trên nhánh `main`.
+
+**Kiểm tra logic:** `npm run test:logic`. **Chạy web:** `npm install`, `npm run dev`. **Build production:** `npm run build`.

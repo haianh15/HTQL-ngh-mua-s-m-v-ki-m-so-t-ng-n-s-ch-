@@ -5,7 +5,7 @@
  * Tuân thủ chính xác Design System layout & spacing
  */
 
-import { canSeeBranch } from '../../domain/rules';
+import { canSeeBranch, canViewAllRegions, canViewDashboard, canAccessScreen } from '../../domain/rules';
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ActiveScreen, BranchCode } from '../../types';
@@ -78,19 +78,19 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
           id: 'DASHBOARD',
           label: 'Tổng quan',
           icon: <LayoutDashboard className="w-4 h-4" />,
-          visible: true,
+          visible: canViewDashboard(currentUser),
         },
         {
           id: 'PR_LIST',
           label: 'Đề nghị mua sắm',
           icon: <FileText className="w-4 h-4" />,
-          visible: true,
+          visible: canAccessScreen(currentUser, 'PR_LIST'),
         },
         {
           id: 'APPROVAL_QUEUE',
           label: 'Hàng chờ phê duyệt',
           icon: <CheckSquare className="w-4 h-4" />,
-          visible: !!isApprover,
+          visible: canAccessScreen(currentUser, 'APPROVAL_QUEUE'),
         },
       ],
     },
@@ -101,19 +101,19 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
           id: 'BUDGET_OVERVIEW',
           label: 'Quản lý ngân sách',
           icon: <PieChart className="w-4 h-4" />,
-          visible: true,
+          visible: canAccessScreen(currentUser, 'BUDGET_OVERVIEW'),
         },
         {
           id: 'EXECUTION_LIST',
           label: 'Thực hiện mua sắm',
           icon: <ShoppingBag className="w-4 h-4" />,
-          visible: !!isProcurement || !!isFinance || !!isAdmin,
+          visible: canAccessScreen(currentUser, 'EXECUTION_LIST'),
         },
         {
           id: 'RECONCILIATION_IMPORT',
           label: 'Đối soát & Nhập file',
           icon: <Receipt className="w-4 h-4" />,
-          visible: !!isAccountant || !!isFinance || !!isAdmin,
+          visible: canAccessScreen(currentUser, 'RECONCILIATION_IMPORT'),
         },
       ],
     },
@@ -124,7 +124,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
           id: 'REPORTS',
           label: 'Báo cáo & Phân tích',
           icon: <BarChart3 className="w-4 h-4" />,
-          visible: true,
+          visible: canAccessScreen(currentUser, 'REPORTS'),
         },
         {
           id: 'NOTIFICATIONS',
@@ -137,7 +137,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
           id: 'ADMIN_MANAGEMENT',
           label: 'Quản trị hệ thống',
           icon: <Settings className="w-4 h-4" />,
-          visible: !!isAdmin || !!isFinance,
+          visible: !!isAdmin,
         },
       ],
     },
@@ -225,7 +225,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
         </nav>
 
         {/* Scenario Test Button */}
-        <div className="p-3 border-t border-[#DDE0EA]">
+        {currentUser?.roles.includes('bod') && <div className="p-3 border-t border-[#DDE0EA]">
           <button
             type="button"
             onClick={onOpenScenarioModal}
@@ -234,7 +234,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
             <PlayCircle className="w-4 h-4" />
             <span>Tình huống minh họa (A–G)</span>
           </button>
-        </div>
+        </div>}
       </aside>
 
       {/* Mobile Drawer */}
@@ -309,18 +309,19 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
             {/* Scope Filter Dropdown */}
             <div className="flex items-center gap-2">
               <Building2 className="w-4 h-4 text-[#5540C7] hidden sm:block" />
-              <select
+              {canViewDashboard(currentUser) && <select
                 value={currentBranchScope}
                 onChange={(e) => setBranchScope(e.target.value as BranchCode | 'ALL')}
                 className="text-xs sm:text-sm font-semibold bg-[#F7F8FC] border border-[#DDE0EA] rounded-[8px] px-2.5 py-1.5 text-[#202039] focus:outline-none focus:border-[#5540C7] cursor-pointer"
                 title="Chọn phạm vi hiển thị dữ liệu chi nhánh"
               >
-                {branchOptions.filter(opt => opt.id === 'ALL' ? canSeeBranch(currentUser, 'BR_HCM') : canSeeBranch(currentUser, opt.id)).map((opt) => (
+                {branchOptions.filter(opt => opt.id === 'ALL' ? canViewAllRegions(currentUser) : canSeeBranch(currentUser, opt.id)).map((opt) => (
                   <option key={opt.id} value={opt.id}>
                     {opt.name}
                   </option>
                 ))}
-              </select>
+              </select>}
+              {!canViewDashboard(currentUser) && <span className="text-xs font-semibold text-[#62657A]">Phạm vi: {currentUser?.branchId}</span>}
             </div>
           </div>
 
@@ -337,7 +338,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
                 <ChevronDown className="w-3.5 h-3.5" />
               </button>
 
-              {roleSwitcherOpen && (
+              {false && roleSwitcherOpen && (
                 <div
                   className="absolute right-0 mt-2 w-72 bg-white border border-[#DDE0EA] rounded-[12px] shadow-lg py-2 z-40 text-xs"
                   onClick={() => setRoleSwitcherOpen(false)}

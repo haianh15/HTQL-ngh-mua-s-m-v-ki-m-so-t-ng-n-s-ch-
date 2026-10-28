@@ -34,7 +34,7 @@ import {
   INITIAL_AUDIT_LOGS,
 } from '../data/initialData';
 import { ToastMessage } from '../components/common/Toast';
-import { DEMO_PASSWORD, DEMO_OTP, availableBudget, canSeeBranch, canApproveStep, isValidPRItems, isValidAmount, reserveBudget, commitBudget, recognizeExpense, releaseHold, transferBudget, heldForRequest } from '../domain/rules';
+import { DEMO_PASSWORD, DEMO_OTP, availableBudget, canSeeBranch, canApproveStep, canViewAllRegions, canReadRequest, canAccessScreen, defaultScreenFor, isValidPRItems, isValidAmount, reserveBudget, commitBudget, recognizeExpense, releaseHold, transferBudget, heldForRequest } from '../domain/rules';
 
 interface AppContextType {
   // Auth state
@@ -188,15 +188,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [isAuthenticated]);
 
-  const canReadPR = (user: User | null, pr: PurchaseRequest) => {
-    if (!user || !canSeeBranch(user, pr.branchId)) return false;
-    if (user.roles.includes('requester') && user.roles.length === 1) return pr.createdById === user.id;
-    if (user.roles.includes('dept_head') && user.roles.length === 1) return pr.departmentId === user.departmentId;
-    return true;
-  };
-  const permittedBudgetPools = budgetPools.filter(b => canSeeBranch(currentUser, b.branchId) &&
-    (!currentUser?.roles.includes('requester') || currentUser.roles.length !== 1 || b.departmentId === currentUser.departmentId));
-  const permittedPRs = purchaseRequests.filter(pr => canReadPR(currentUser, pr));
+  // Bộ lọc dữ liệu cốt lõi: áp dụng cho bảng, biểu đồ, tìm kiếm, export, không chỉ menu.
+  const permittedBudgetPools = budgetPools.filter(b =>
+    canSeeBranch(currentUser, b.branchId) &&
+    (currentUser?.roles.some(r => ['bod','branch_director','finance','procurement','accountant'].includes(r)) ||
+      (currentUser?.roles.some(r => ['dept_head','requester'].includes(r)) && b.departmentId === currentUser.departmentId))
+  );
+  const permittedPRs = purchaseRequests.filter(pr => canReadRequest(currentUser, pr));
 
   // Toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -232,6 +230,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const navigateTo = (screen: ActiveScreen, prId: string | null = null) => {
+    if (isAuthenticated && !canAccessScreen(currentUser, screen)) {
+      addToast('Bạn không có quyền truy cập chức năng này.', 'error');
+      setActiveScreen('FORBIDDEN_403');
+      return;
+    }
     if (prId !== undefined) {
       setSelectedPrId(prId);
     }
@@ -240,7 +243,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const setBranchScope = (scope: BranchCode | 'ALL') => {
-    if (scope === 'ALL' && !canSeeBranch(currentUser, 'BR_HCM')) {
+    if (scope === 'ALL' && !canViewAllRegions(currentUser)) {
       addToast('Tài khoản không có quyền xem toàn công ty.', 'error');
       return;
     }
@@ -276,8 +279,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsSessionExpired(false);
     setIsAuthenticated(true);
     setMfaPendingUser(null);
-    setCurrentBranchScope(['admin','bod','finance'].some(r => user.roles.includes(r as any)) && user.branchId === 'HQ' ? 'ALL' : user.branchId);
-    setActiveScreen('DASHBOARD');
+    setCurrentBranchScope(canViewAllRegions(user) ? 'ALL' : user.branchId);
+    setActiveScreen(defaultScreenFor(user));
     addAuditLog('USER_LOGIN', 'USER', user.id, `Đăng nhập thành công (${user.name})`);
     addToast(`Chào mừng ${user.name} đã quay trở lại hệ thống Procure UI`, 'success');
     return { success: true, requiresMfa: false };
@@ -291,8 +294,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsSessionExpired(false);
     setIsAuthenticated(true);
     setMfaPendingUser(null);
-    setCurrentBranchScope(['admin','bod','finance'].some(r => mfaPendingUser.roles.includes(r as any)) && mfaPendingUser.branchId === 'HQ' ? 'ALL' : mfaPendingUser.branchId);
-    setActiveScreen('DASHBOARD');
+    setCurrentBranchScope(canViewAllRegions(mfaPendingUser) ? 'ALL' : mfaPendingUser.branchId);
+    setActiveScreen(defaultScreenFor(mfaPendingUser));
     addAuditLog('USER_MFA_VERIFIED', 'USER', mfaPendingUser.id, 'Xác thực OTP/MFA 6 chữ số thành công');
     addToast(`Xác thực bổ sung thành công. Chào mừng ${mfaPendingUser.name}!`, 'success');
     return true;
@@ -326,13 +329,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const toggleUserActive = (userId: string) => {
-    if (!currentUser?.roles.includes('admin') || currentUser.id === userId) {
+    const target = users.find(u => u.id === userId);
+    if (!currentUser?.roles.includes('admin') || currentUser.id === userId || !target ||
+        target.branchId !== currentUser.branchId) {
       addToast('Chỉ quản trị viên có thể cập nhật tài khoản khác.', 'error'); return;
     }
     setUsers((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, isActive: !u.isActive } : u))
     );
-    const target = users.find((u) => u.id === userId);
     const nextStatus = target ? !target.isActive : false;
     addAuditLog(
       'UPDATE_USER_STATUS',
@@ -344,8 +348,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateUserRolesAndScope = (userId: string, roles: User['roles'], branchId: BranchCode) => {
-    if (!currentUser?.roles.includes('admin')) {
-      addToast('Không có quyền phân vai trò.', 'error'); return;
+    const target = users.find(u => u.id === userId);
+    if (!currentUser?.roles.includes('admin') || !target ||
+        target.branchId !== currentUser.branchId || branchId !== currentUser.branchId ||
+        roles.some(r => ['bod', 'admin'].includes(r))) {
+      addToast('Không có quyền thay đổi tài khoản ngoài khu vực hoặc cấp quyền lãnh đạo/quản trị.', 'error'); return;
     }
     setUsers((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, roles, branchId } : u))
@@ -356,9 +363,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // PR CRUD
   const createPurchaseRequest = (data: Partial<PurchaseRequest>, items: PRItem[], isDraft = false): string => {
-    if (!currentUser || !currentUser.isActive) { addToast('Bạn cần đăng nhập.', 'error'); return ''; }
+    if (!currentUser || !currentUser.isActive || !canAccessScreen(currentUser,'PR_CREATE')) { addToast('Bạn không có quyền tạo đề nghị.', 'error'); return ''; }
     if (!isDraft && !isValidPRItems(items)) { addToast('Danh sách hạng mục chưa hợp lệ.', 'error'); return ''; }
-    if (data.budgetId && !budgetPools.some(b => b.id === data.budgetId && canSeeBranch(currentUser, b.branchId))) {
+    if (data.budgetId && !budgetPools.some(b => b.id === data.budgetId && b.branchId === currentUser.branchId &&
+      (b.departmentId === currentUser.departmentId || currentUser.roles.some(r => ['finance','bod','branch_director'].includes(r))))) {
       addToast('Nguồn ngân sách không thuộc phạm vi được phép.', 'error'); return '';
     }
     const prNumber = Math.max(43, ...purchaseRequests.map(pr=>Number(pr.id.match(/PR-2026-(\d+)/)?.[1] || 0))) + 1;
@@ -404,9 +412,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       title: data.title || 'Đề nghị mua sắm mới',
       purpose: data.purpose || '',
       needByDate: data.needByDate || '15/11/2026',
-      branchId: data.branchId || currentUser?.branchId || 'HQ',
-      departmentId: data.departmentId || currentUser?.departmentId || 'DEP_PROD_HQ',
-      departmentName: data.departmentName || currentUser?.departmentName || 'Phòng Sản phẩm',
+      branchId: currentUser?.branchId || 'HQ',
+      departmentId: currentUser?.departmentId || 'DEP_PROD_HQ',
+      departmentName: currentUser?.departmentName || 'Phòng Sản phẩm',
       budgetId: budget.id,
       budgetName: budget.name,
       status: isDraft ? 'DRAFT' : 'PENDING_DEPT',
@@ -898,7 +906,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // TO-BE 02: Mua hàng tiếp nhận & ghi nhận đặt hàng
   const receivePRForProcurement = (prId: string) => {
     const pr = purchaseRequests.find(p => p.id === prId);
-    if (!pr || !currentUser?.roles.includes('procurement') || !['APPROVED','IN_PROGRESS'].includes(pr.status)) {
+    if (!pr || !currentUser?.roles.includes('procurement') || !canSeeBranch(currentUser,pr.branchId) || !['APPROVED','IN_PROGRESS'].includes(pr.status)) {
       addToast('Chỉ Mua hàng được tiếp nhận hồ sơ có bản duyệt hợp lệ.', 'error'); return;
     }
     setPurchaseRequests(prev => prev.map(p => p.id !== prId ? p : {
@@ -917,7 +925,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const recordActualPOOrder = (prId: string, actualAmount: number, poRef: string, supplierName: string) => {
     const pr = purchaseRequests.find(p => p.id === prId);
     const budget = budgetPools.find(b => b.id === pr?.budgetId);
-    if (!pr || !budget || !currentUser?.roles.includes('procurement') ||
+    if (!pr || !budget || !currentUser?.roles.includes('procurement') || !canSeeBranch(currentUser,pr.branchId) ||
         !['APPROVED','IN_PROGRESS'].includes(pr.status) || !isValidAmount(actualAmount) ||
         !poRef.trim() || !supplierName.trim()) { addToast('Không đủ quyền hoặc thông tin đặt hàng không hợp lệ.', 'error'); return; }
     const previous = pr.execution?.actualOrderedAmount || 0;
@@ -942,7 +950,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const releaseUncommittedRemainder = (prId: string, releaseAmount: number, reason: string) => {
     const pr = purchaseRequests.find(p => p.id === prId);
     const budget = budgetPools.find(b => b.id === pr?.budgetId);
-    if (!pr || !budget || !currentUser?.roles.includes('finance') || !reason.trim() ||
+    if (!pr || !budget || !currentUser?.roles.includes('finance') || !canSeeBranch(currentUser,pr.branchId) || !reason.trim() ||
         !['APPROVED','IN_PROGRESS'].includes(pr.status)) {
       addToast('Chỉ Tài chính có thể xác nhận giải phóng phần không còn nghĩa vụ.', 'error'); return;
     }
@@ -1057,7 +1065,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): boolean => {
     const from = budgetPools.find((b) => b.id === fromBudgetId);
     const to = budgetPools.find((b) => b.id === toBudgetId);
-    if (!from || !to || fromBudgetId === toBudgetId || !isValidAmount(amount) || !reason.trim() || !currentUser?.roles.includes('finance') || !canSeeBranch(currentUser,from.branchId)) return false;
+    if (!from || !to || fromBudgetId === toBudgetId || !isValidAmount(amount) || !reason.trim() || !currentUser?.roles.includes('finance') || !canSeeBranch(currentUser,from.branchId) || !canSeeBranch(currentUser,to.branchId)) return false;
 
     const fromAvailable = from.allocated + (from.adjustments || 0) - from.held - from.committed - from.used;
     if (fromAvailable < amount) {
@@ -1472,8 +1480,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const resetDemoData = () => {
     setUsers(INITIAL_USERS);
-    setCurrentUser(INITIAL_USERS[0]);
-    setIsAuthenticated(true);
+    setCurrentUser(null);
+    setIsAuthenticated(false);
     setBudgetPools(INITIAL_BUDGET_POOLS);
     setPurchaseRequests(INITIAL_PURCHASE_REQUESTS);
     setLedgerEntries(INITIAL_LEDGER_ENTRIES);
@@ -1482,8 +1490,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(INITIAL_NOTIFICATIONS);
     setAuditLogs(INITIAL_AUDIT_LOGS);
     setAccountingBatches([]);
-    setCurrentBranchScope('ALL');
-    setActiveScreen('DASHBOARD');
+    setCurrentBranchScope('HQ');
+    setActiveScreen('AUTH_LOGIN');
     Object.keys(localStorage).filter(k => k.startsWith('procure-demo-v2-')).forEach(k => localStorage.removeItem(k));
     addToast('Đã khôi phục dữ liệu mẫu ban đầu của hệ thống.', 'info');
   };
@@ -1497,16 +1505,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       selectedPrId,
       currentBranchScope,
       isSessionExpired,
-      users: currentUser?.roles.includes('admin') || !isAuthenticated ? users : users.filter(u => u.id === currentUser?.id),
-      budgetPools: permittedBudgetPools,
+      users: !isAuthenticated ? users : currentUser?.roles.includes('admin')
+        ? users.filter(u => u.branchId === currentUser.branchId) : users.filter(u => u.id === currentUser?.id),
+      budgetPools: currentUser?.roles.length === 1 && currentUser.roles[0] === 'requester'
+        ? permittedBudgetPools.map(b => ({ ...b, allocated: 0, adjustments: 0, held: 0, committed: 0, used: 0 }))
+        : permittedBudgetPools,
       purchaseRequests: permittedPRs,
       ledgerEntries: ledgerEntries.filter(x => permittedBudgetPools.some(b => b.id === x.budgetId)),
-      transfers: transfers.filter(t => (currentUser?.roles.includes('finance') || currentUser?.roles.includes('bod') || currentUser?.roles.includes('admin')) &&
+      transfers: transfers.filter(t => (currentUser?.roles.includes('finance') || currentUser?.roles.includes('bod')) &&
         canSeeBranch(currentUser, budgetPools.find(b=>b.id === t.fromBudgetId)?.branchId || 'HQ')),
       delegations: delegations.filter(d => currentUser?.roles.includes('admin') || d.fromUserId === currentUser?.id || d.toUserId === currentUser?.id),
       notifications: notifications.filter(n => n.userId === currentUser?.id),
-      auditLogs: auditLogs.filter(a => currentUser?.roles.some(r => ['admin','bod','finance'].includes(r))),
-      accountingBatches: currentUser?.roles.some(r => ['admin','accountant','finance'].includes(r)) ? accountingBatches : [],
+      auditLogs: auditLogs.filter(a => currentUser?.roles.includes('admin') || (currentUser?.roles.includes('bod') && true) || (currentUser?.roles.includes('finance') && a.userId === currentUser.id)),
+      accountingBatches: currentUser?.roles.some(r => ['accountant','finance','bod'].includes(r)) ? accountingBatches : [],
       toasts,
       addToast,
       dismissToast,

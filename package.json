@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test:logic": "node --test tests/finance.test.cjs"
+    "test:logic": "tsc --outDir .test-build --module commonjs --target es2020 --esModuleInterop --moduleResolution node --noEmit false src/domain/rules.ts src/types/index.ts && node -e \"require('fs').writeFileSync('.test-build/package.json', JSON.stringify({type:'commonjs'}))\" && node --test tests/finance.test.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -24,12 +24,12 @@
     "motion": "^12.23.24"
   },
   "devDependencies": {
-  "@types/node": "^22.14.0",
-  "@types/react": "^19.3.0",
-  "@types/react-dom": "^19.3.0",
-  "autoprefixer": "^10.4.21",
-  "tailwindcss": "^4.3.3",
-  "typescript": "^7.0.2",
-  "@types/express": "^4.17.21"
-}
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.4.21",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "@types/express": "^4.17.21"
+  }
 }

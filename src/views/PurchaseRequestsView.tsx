@@ -10,10 +10,11 @@ import { formatVND, getPRStatusBadgeInfo } from '../utils/formatters';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { PRStatus, BranchCode } from '../types';
+import { canAccessScreen } from '../domain/rules';
 import { Plus, Search, Filter, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 
 export const PurchaseRequestsView: React.FC = () => {
-  const { purchaseRequests, currentBranchScope, navigateTo } = useApp();
+  const { purchaseRequests, currentBranchScope, navigateTo, currentUser } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -101,13 +102,13 @@ export const PurchaseRequestsView: React.FC = () => {
             Quản lý toàn bộ vòng đời đề xuất mua sắm hàng hóa, vật tư và thiết bị nội bộ (UC-MS01..07)
           </p>
         </div>
-        <Button
+        {canAccessScreen(currentUser, 'PR_CREATE') && <Button
           variant="primary"
           onClick={() => navigateTo('PR_CREATE')}
           icon={<Plus className="w-4 h-4" />}
         >
           Tạo đề nghị mua sắm
-        </Button>
+        </Button>}
       </div>
 
       {/* Tabs */}

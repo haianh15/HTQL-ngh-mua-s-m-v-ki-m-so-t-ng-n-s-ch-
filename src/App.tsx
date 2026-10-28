@@ -6,6 +6,7 @@
  */
 
 import React, { useState } from 'react';
+import { canAccessScreen } from './domain/rules';
 import { AppProvider, useApp } from './context/AppContext';
 import { AppShell } from './components/layout/AppShell';
 import { ToastContainer } from './components/common/Toast';
@@ -56,14 +57,11 @@ const MainRouter: React.FC = () => {
     );
   }
 
-  // Screen-level guard is defense-in-depth for the DEMO UI, not a substitute for backend permissions.
-  const hasRole = (...roles: string[]) => !!currentUser?.roles.some(r=>roles.includes(r));
-  const forbidden =
-    (activeScreen === 'ADMIN_MANAGEMENT' && !hasRole('admin','finance')) ||
-    (activeScreen === 'APPROVAL_QUEUE' && !hasRole('dept_head','branch_director','finance','bod')) ||
-    (activeScreen === 'EXECUTION_LIST' && !hasRole('procurement','finance','admin')) ||
-    (activeScreen === 'RECONCILIATION_IMPORT' && !hasRole('finance','accountant','admin')) ||
-    (activeScreen === 'PR_DETAIL' && !!selectedPrId && !purchaseRequests.some(pr=>pr.id===selectedPrId));
+  // Kiểm tra quyền màn hình đồng nhất với sidebar và tầng dữ liệu.
+  // Đây là RBAC phía frontend của prototype; backend thật vẫn phải xác thực mọi API.
+  const forbidden = !canAccessScreen(currentUser, activeScreen) ||
+    (activeScreen === 'PR_DETAIL' && (!selectedPrId || !purchaseRequests.some(pr=>pr.id===selectedPrId))) ||
+    (activeScreen === 'PR_EDIT' && (!selectedPrId || !purchaseRequests.some(pr=>pr.id===selectedPrId && pr.status==='DRAFT' && pr.createdById===currentUser?.id)));
   if (forbidden) return <AppShell onOpenScenarioModal={() => setIsScenarioModalOpen(true)}><ForbiddenPage /></AppShell>;
 
   // Authenticated In-App Screens
@@ -97,7 +95,7 @@ const MainRouter: React.FC = () => {
       case 'FORBIDDEN_403':
         return <ForbiddenPage />;
       default:
-        return <DashboardView />;
+        return <ForbiddenPage />;
     }
   };
 

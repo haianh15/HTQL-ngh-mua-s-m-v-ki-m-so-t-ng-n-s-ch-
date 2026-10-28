@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   availableBudget, reserveBudget, commitBudget, recognizeExpense, releaseHold,
   transferBudget, canApproveStep, canSeeBranch, heldForRequest, isValidPRItems,
+  canViewAllRegions, canViewDashboard, canReadRequest, canAccessScreen, defaultScreenFor,
 } = require('../.test-build/domain/rules.js');
 const pool=(id,allocated)=>({id,allocated,adjustments:0,held:0,committed:0,used:0,branchId:'HQ'});
 test('A: 100M, reserve 70M -> 50M rejected (no negative)',()=>{
@@ -63,4 +64,58 @@ test('Effective version remains separate during revision',()=>{
 test('Validate positive integer monetary items and tax calculation',()=>{
   assert.equal(isValidPRItems([{name:'Mouse',quantity:2,unitPrice:100,taxRate:10,totalPrice:220}]),true);
   assert.equal(isValidPRItems([{name:'Mouse',quantity:2,unitPrice:100,taxRate:10,totalPrice:200}]),false);
+});
+
+const staff=(role,branch='BR_HCM',department='D1')=>({id:role,isActive:true,roles:[role],branchId:branch,departmentId:department});
+const exampleRequest={branchId:'BR_HCM',departmentId:'D1',createdById:'requester'};
+test('RBAC: only company director can select ALL and cross-branch data',()=>{
+  for (const role of ['requester','dept_head','branch_director','finance','procurement','accountant','admin']) {
+    const u=staff(role,'HQ');
+    assert.equal(canViewAllRegions(u),false,role);
+    assert.equal(canSeeBranch(u,'BR_HCM'),false,role);
+  }
+  assert.equal(canViewAllRegions(staff('bod','HQ')),true);
+  assert.equal(canSeeBranch(staff('bod','HQ'),'BR_HCM'),true);
+});
+test('RBAC: requester only sees own requests, no dashboard or region reports',()=>{
+  const u=staff('requester');
+  assert.equal(defaultScreenFor(u),'PR_LIST');
+  for(const sc of ['DASHBOARD','REPORTS','BUDGET_OVERVIEW','APPROVAL_QUEUE','ADMIN_MANAGEMENT']) assert.equal(canAccessScreen(u,sc),false);
+  for(const sc of ['PR_LIST','PR_CREATE','PR_EDIT','PR_DETAIL','NOTIFICATIONS']) assert.equal(canAccessScreen(u,sc),true);
+  assert.equal(canReadRequest(u,exampleRequest),true);
+  assert.equal(canReadRequest(u,{...exampleRequest,createdById:'other'}),false);
+});
+test('RBAC: department head sees own dept requests and approval queue but not dashboard',()=>{
+  const u=staff('dept_head');
+  assert.equal(defaultScreenFor(u),'APPROVAL_QUEUE');
+  assert.equal(canViewDashboard(u),false);
+  assert.equal(canAccessScreen(u,'APPROVAL_QUEUE'),true);
+  assert.equal(canReadRequest(u,exampleRequest),true);
+  assert.equal(canReadRequest(u,{...exampleRequest,departmentId:'D2'}),false);
+  assert.equal(canAccessScreen(u,'REPORTS'),false);
+});
+test('RBAC: regional finance/procurement/accountant see dashboard for assigned region only',()=>{
+  for (const role of ['finance','procurement','accountant']) {
+    const u=staff(role);
+    assert.equal(canViewDashboard(u),true,role);
+    assert.equal(canAccessScreen(u,'DASHBOARD'),true,role);
+    assert.equal(canReadRequest(u,exampleRequest),true,role);
+    assert.equal(canReadRequest(u,{...exampleRequest,branchId:'BR_DN'}),false,role);
+  }
+});
+test('RBAC: branch director sees assigned branch, system admin only admin screens',()=>{
+  const dir=staff('branch_director');
+  assert.equal(canViewDashboard(dir),true);
+  assert.equal(canSeeBranch(dir,'BR_DN'),false);
+  const admin=staff('admin');
+  assert.equal(defaultScreenFor(admin),'ADMIN_MANAGEMENT');
+  assert.equal(canAccessScreen(admin,'DASHBOARD'),false);
+  assert.equal(canAccessScreen(admin,'PR_DETAIL'),false);
+  assert.equal(canAccessScreen(admin,'ADMIN_MANAGEMENT'),true);
+});
+
+test('RBAC: central HQ finance cannot approve request outside HQ, BOD can',()=>{
+  const pr={createdById:'author',branchId:'BR_DN',departmentId:'DN',status:'PENDING_FINANCE',currentStepIndex:0,totalAmount:15_000_000,approvalTimeline:[{status:'PENDING',assignedRole:'finance'}]};
+  assert.equal(canApproveStep(staff('finance','HQ','FIN'),pr,[]),false);
+  assert.equal(canApproveStep(staff('finance','BR_DN','FIN'),pr,[]),true);
 });

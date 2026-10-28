@@ -25,6 +25,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { PRItem } from '../types';
+import { canApproveStep, canAccessScreen } from '../domain/rules';
 
 export const PRDetailView: React.FC = () => {
   const {
@@ -32,6 +33,7 @@ export const PRDetailView: React.FC = () => {
     purchaseRequests,
     budgetPools,
     currentUser,
+    delegations,
     processApprovalDecision,
     createPRRevision,
     requestPRCancel,
@@ -70,8 +72,7 @@ export const PRDetailView: React.FC = () => {
 
   const isAssignedApprover =
     isPendingApproval &&
-    currentUser?.roles.includes(currentStep.assignedRole) &&
-    currentUser?.id !== pr.createdById; // BR01: Người tạo không tự duyệt!
+    canApproveStep(currentUser, pr, delegations); // Kiểm tra vai trò + đúng chi nhánh/phòng ban/ủy quyền
 
   const isCreatorSelfApprover =
     isPendingApproval && currentUser?.id === pr.createdById;
@@ -186,9 +187,9 @@ export const PRDetailView: React.FC = () => {
       </div>
 
       {/* Main Split Layout: Left Details + Right Budget Impact Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      <div className={`grid grid-cols-1 ${currentUser?.roles.length === 1 && currentUser.roles[0] === 'requester' ? '' : 'lg:grid-cols-3'} gap-6 items-start`}>
         {/* Left Column (2 Cols): Request Info, Items, Timeline, Version Audit */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className={`${currentUser?.roles.length === 1 && currentUser.roles[0] === 'requester' ? '' : 'lg:col-span-2'} space-y-6`}> 
           <div className="bg-white border border-[#DDE0EA] rounded-[16px] p-6 shadow-[0_4px_20px_rgba(32,32,57,0.03)]">
             {/* Header: ID, Effective Version Badge, Status */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -332,7 +333,7 @@ export const PRDetailView: React.FC = () => {
           </div>
 
           {/* Thông tin thực hiện mua sắm nếu đã Approved (TO-BE 02) */}
-          {pr.execution && ['APPROVED','IN_PROGRESS','COMPLETED'].includes(pr.status) && (
+          {!(currentUser?.roles.length === 1 && currentUser.roles[0] === 'requester') && pr.execution && ['APPROVED','IN_PROGRESS','COMPLETED'].includes(pr.status) && (
             <div className="bg-white border border-[#DDE0EA] rounded-[16px] p-6 shadow-[0_4px_20px_rgba(32,32,57,0.03)]">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -368,20 +369,20 @@ export const PRDetailView: React.FC = () => {
               </div>
 
               <div className="flex justify-end">
-                <Button
+                {canAccessScreen(currentUser, 'EXECUTION_LIST') && <Button
                   variant="secondary"
                   size="small"
                   onClick={() => navigateTo('EXECUTION_LIST')}
                 >
                   Mở phân hệ Thực hiện mua sắm →
-                </Button>
+                </Button>}
               </div>
             </div>
           )}
         </div>
 
-        {/* Right Column (1 Col): Budget Impact Panel & Approver Actions */}
-        <div>
+        {/* Không tiết lộ số dư cho nhân viên đề nghị; chỉ người có trách nhiệm xem tác động ngân sách. */}
+        {!(currentUser?.roles.length === 1 && currentUser.roles[0] === 'requester') && <div>
           <BudgetImpactPanel
             budget={budget}
             requestAmount={pr.totalAmount}
@@ -397,7 +398,7 @@ export const PRDetailView: React.FC = () => {
             onReject={() => setIsRejectDialogOpen(true)}
             onRequestRevision={() => setIsRequestRevisionOpen(true)}
           />
-        </div>
+        </div>}
       </div>
 
       {/* Modal: So sánh phiên bản (UC-MS06) */}

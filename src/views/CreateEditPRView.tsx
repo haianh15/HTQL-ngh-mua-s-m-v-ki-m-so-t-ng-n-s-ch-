@@ -73,7 +73,8 @@ export const CreateEditPRView: React.FC = () => {
   }, [items]);
 
   const totalTax = totalAmount - subtotal;
-  const isBudgetExceeded = totalAmount > availableBudget;
+  const showFinancialBalance = !currentUser?.roles.includes('requester') || currentUser.roles.length > 1;
+  const isBudgetExceeded = showFinancialBalance && totalAmount > availableBudget;
 
   const handleItemChange = (index: number, field: keyof PRItem, value: any) => {
     setItems((prev) => {
@@ -257,14 +258,14 @@ export const CreateEditPRView: React.FC = () => {
                 const avail = Math.max(0, limit - bg.held - bg.committed - bg.used);
                 return (
                   <option key={bg.id} value={bg.id}>
-                    {bg.name} (Khả dụng: {formatVND(avail)})
+                    {bg.name}{showFinancialBalance ? ` (Khả dụng: ${formatVND(avail)})` : ''}
                   </option>
                 );
               })}
             </select>
-            <span className="text-xs text-[#62657A] mt-1 block">
+            {showFinancialBalance && <span className="text-xs text-[#62657A] mt-1 block">
               Khả dụng hiện tại: <strong className="text-[#176B49]">{formatVND(availableBudget)}</strong>
-            </span>
+            </span>}
           </div>
 
           <div>
@@ -441,7 +442,7 @@ export const CreateEditPRView: React.FC = () => {
         </div>
 
         {/* Cảnh báo kiểm tra ngân sách sơ bộ (TO-BE 01 Step 2) */}
-        <div className="mb-6">
+        {showFinancialBalance && <div className="mb-6">
           {isBudgetExceeded ? (
             <Alert variant="amber">
               <div className="flex items-start gap-2">
@@ -464,7 +465,7 @@ export const CreateEditPRView: React.FC = () => {
               </div>
             </Alert>
           )}
-        </div>
+        </div>}
 
         {/* Đính kèm chứng từ / báo giá (UC-MS03) */}
         <div className="mb-8">
