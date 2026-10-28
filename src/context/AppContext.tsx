@@ -236,6 +236,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setActiveScreen('FORBIDDEN_403');
       return;
     }
+    // Kiểm soát quyền truy cập theo từng hồ sơ, không chỉ theo tên màn hình.
+    // Người đề nghị không thể đoán mã PR của người khác rồi mở xem / sửa.
+    if (isAuthenticated && (screen === 'PR_DETAIL' || screen === 'PR_EDIT')) {
+      const targetId = prId ?? selectedPrId;
+      const targetPR = purchaseRequests.find(p => p.id === targetId);
+      if (!targetPR || !canReadRequest(currentUser, targetPR) ||
+          (screen === 'PR_EDIT' && (targetPR.createdById !== currentUser?.id || targetPR.status !== 'DRAFT'))) {
+        addToast('Bạn chỉ có thể truy cập đề nghị thuộc quyền của mình.', 'error');
+        setSelectedPrId(null);
+        setActiveScreen('FORBIDDEN_403');
+        return;
+      }
+    }
     if (prId !== undefined) {
       setSelectedPrId(prId);
     }

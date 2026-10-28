@@ -99,8 +99,11 @@ export function canViewDashboard(user: User | null): boolean {
   );
 }
 export function canReadRequest(user: User | null, pr: PurchaseRequest): boolean {
-  if (!user?.isActive || !canSeeBranch(user, pr.branchId)) return false;
+  if (!user?.isActive) return false;
+  // Ưu tiên quyền sở hữu: nhân viên chỉ đọc hồ sơ do chính tài khoản này tạo,
+  // kể cả khi sau này người đó được điều chuyển sang đơn vị khác.
   if (isRequesterRole(user)) return pr.createdById === user.id;
+  if (!canSeeBranch(user, pr.branchId)) return false;
   if (user.roles.includes('bod')) return true;
   if (user.roles.includes('branch_director')) return true; // Chỉ chi nhánh được giao
   if (user.roles.some(r => ['finance', 'procurement', 'accountant'].includes(r))) return true;

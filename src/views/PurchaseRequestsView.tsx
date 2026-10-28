@@ -10,7 +10,7 @@ import { formatVND, getPRStatusBadgeInfo } from '../utils/formatters';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { PRStatus, BranchCode } from '../types';
-import { canAccessScreen, isRequesterRole } from '../domain/rules';
+import { canAccessScreen, canReadRequest, isRequesterRole } from '../domain/rules';
 import { Plus, Search, Filter, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 
 export const PurchaseRequestsView: React.FC = () => {
@@ -23,15 +23,17 @@ export const PurchaseRequestsView: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
 
+  // Tập hồ sơ có quyền đọc là nguồn dữ liệu DUY NHẤT cho bảng, tab và tìm kiếm.
+  // Với nhân viên đề nghị, quyền sở hữu theo ID người tạo được áp dụng trước mọi bộ lọc.
+  const visiblePRs = useMemo(() => purchaseRequests.filter(pr =>
+    canReadRequest(currentUser, pr) &&
+    (!requesterOnly || pr.createdById === currentUser?.id) &&
+    (requesterOnly || currentBranchScope === 'ALL' || pr.branchId === currentBranchScope)
+  ), [purchaseRequests, currentUser, requesterOnly, currentBranchScope]);
+
   // Filter & Search
   const filteredPRs = useMemo(() => {
-    return purchaseRequests.filter((pr) => {
-      if (requesterOnly && pr.createdById !== currentUser?.id) return false;
-      // Phạm vi chi nhánh từ AppShell
-      if (currentBranchScope !== 'ALL' && pr.branchId !== currentBranchScope) {
-        return false;
-      }
-
+    return visiblePRs.filter((pr) => {
       // Tab filter
       if (activeTab === 'PENDING') {
         if (!['PENDING_DEPT', 'PENDING_FINANCE', 'PENDING_FINAL'].includes(pr.status)) return false;
@@ -60,37 +62,37 @@ export const PurchaseRequestsView: React.FC = () => {
 
       return true;
     });
-  }, [purchaseRequests, currentBranchScope, activeTab, statusFilter, searchTerm, currentUser?.id, requesterOnly]);
+  }, [visiblePRs, activeTab, statusFilter, searchTerm]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredPRs.length / pageSize));
   const paginatedPRs = filteredPRs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const tabs = [
-    { id: 'ALL', label: requesterOnly ? 'Đề nghị của tôi' : 'Tất cả đề nghị', count: purchaseRequests.length },
+    { id: 'ALL', label: requesterOnly ? 'Đề nghị của tôi' : 'Tất cả đề nghị', count: visiblePRs.length },
     {
       id: 'PENDING',
       label: 'Đang chờ duyệt',
-      count: purchaseRequests.filter((p) =>
+      count: visiblePRs.filter((p) =>
         ['PENDING_DEPT', 'PENDING_FINANCE', 'PENDING_FINAL'].includes(p.status)
       ).length,
     },
     {
       id: 'APPROVED',
       label: 'Đã duyệt & Thực hiện',
-      count: purchaseRequests.filter((p) =>
+      count: visiblePRs.filter((p) =>
         ['APPROVED', 'IN_PROGRESS', 'COMPLETED'].includes(p.status)
       ).length,
     },
     {
       id: 'WAITING_FUNDS',
       label: 'Chờ nguồn',
-      count: purchaseRequests.filter((p) => p.status === 'WAITING_FUNDS').length,
+      count: visiblePRs.filter((p) => p.status === 'WAITING_FUNDS').length,
     },
     {
       id: 'DRAFT',
       label: 'Bản nháp',
-      count: purchaseRequests.filter((p) => p.status === 'DRAFT').length,
+      count: visiblePRs.filter((p) => p.status === 'DRAFT').length,
     },
   ];
 

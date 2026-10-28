@@ -41,7 +41,9 @@ export const PRDetailView: React.FC = () => {
     addToast,
   } = useApp();
 
-  const pr = purchaseRequests.find((p) => p.id === selectedPrId) || purchaseRequests[0];
+  // App.tsx và AppContext.navigateTo đều từ chối hồ sơ không có quyền đọc.
+  // Tuyệt đối không fallback sang purchaseRequests[0] vì có thể hiển thị nhầm hồ sơ.
+  const pr = purchaseRequests.find((p) => p.id === selectedPrId)!;
 
   const [activeVersionNumber, setActiveVersionNumber] = useState<number>(pr.currentVersion);
   const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
