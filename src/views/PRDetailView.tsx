@@ -25,7 +25,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { PRItem } from '../types';
-import { canApproveStep, canAccessScreen } from '../domain/rules';
+import { canApproveStep, canAccessScreen, isRequesterRole } from '../domain/rules';
 
 export const PRDetailView: React.FC = () => {
   const {
@@ -187,9 +187,9 @@ export const PRDetailView: React.FC = () => {
       </div>
 
       {/* Main Split Layout: Left Details + Right Budget Impact Panel */}
-      <div className={`grid grid-cols-1 ${currentUser?.roles.length === 1 && currentUser.roles[0] === 'requester' ? '' : 'lg:grid-cols-3'} gap-6 items-start`}>
+      <div className={`grid grid-cols-1 ${isRequesterRole(currentUser) ? '' : 'lg:grid-cols-3'} gap-6 items-start`}>
         {/* Left Column (2 Cols): Request Info, Items, Timeline, Version Audit */}
-        <div className={`${currentUser?.roles.length === 1 && currentUser.roles[0] === 'requester' ? '' : 'lg:col-span-2'} space-y-6`}> 
+        <div className={`${isRequesterRole(currentUser) ? '' : 'lg:col-span-2'} space-y-6`}> 
           <div className="bg-white border border-[#DDE0EA] rounded-[16px] p-6 shadow-[0_4px_20px_rgba(32,32,57,0.03)]">
             {/* Header: ID, Effective Version Badge, Status */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -333,7 +333,7 @@ export const PRDetailView: React.FC = () => {
           </div>
 
           {/* Thông tin thực hiện mua sắm nếu đã Approved (TO-BE 02) */}
-          {!(currentUser?.roles.length === 1 && currentUser.roles[0] === 'requester') && pr.execution && ['APPROVED','IN_PROGRESS','COMPLETED'].includes(pr.status) && (
+          {!(isRequesterRole(currentUser)) && pr.execution && ['APPROVED','IN_PROGRESS','COMPLETED'].includes(pr.status) && (
             <div className="bg-white border border-[#DDE0EA] rounded-[16px] p-6 shadow-[0_4px_20px_rgba(32,32,57,0.03)]">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -382,7 +382,7 @@ export const PRDetailView: React.FC = () => {
         </div>
 
         {/* Không tiết lộ số dư cho nhân viên đề nghị; chỉ người có trách nhiệm xem tác động ngân sách. */}
-        {!(currentUser?.roles.length === 1 && currentUser.roles[0] === 'requester') && <div>
+        {!(isRequesterRole(currentUser)) && <div>
           <BudgetImpactPanel
             budget={budget}
             requestAmount={pr.totalAmount}

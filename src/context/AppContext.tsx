@@ -34,7 +34,7 @@ import {
   INITIAL_AUDIT_LOGS,
 } from '../data/initialData';
 import { ToastMessage } from '../components/common/Toast';
-import { DEMO_PASSWORD, DEMO_OTP, availableBudget, canSeeBranch, canApproveStep, canViewAllRegions, canReadRequest, canAccessScreen, defaultScreenFor, isValidPRItems, isValidAmount, reserveBudget, commitBudget, recognizeExpense, releaseHold, transferBudget, heldForRequest } from '../domain/rules';
+import { DEMO_PASSWORD, DEMO_OTP, availableBudget, canSeeBranch, canApproveStep, canViewAllRegions, canReadRequest, canAccessScreen, defaultScreenFor, isValidPRItems, isValidAmount, reserveBudget, commitBudget, recognizeExpense, releaseHold, transferBudget, heldForRequest, isRequesterRole } from '../domain/rules';
 
 interface AppContextType {
   // Auth state
@@ -191,8 +191,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Bộ lọc dữ liệu cốt lõi: áp dụng cho bảng, biểu đồ, tìm kiếm, export, không chỉ menu.
   const permittedBudgetPools = budgetPools.filter(b =>
     canSeeBranch(currentUser, b.branchId) &&
-    (currentUser?.roles.some(r => ['bod','branch_director','finance','procurement','accountant'].includes(r)) ||
-      (currentUser?.roles.some(r => ['dept_head','requester'].includes(r)) && b.departmentId === currentUser.departmentId))
+    (isRequesterRole(currentUser) ? b.departmentId === currentUser.departmentId :
+      (currentUser?.roles.some(r => ['bod','branch_director','finance','procurement','accountant'].includes(r)) ||
+      (currentUser?.roles.includes('dept_head') && b.departmentId === currentUser.departmentId)))
   );
   const permittedPRs = purchaseRequests.filter(pr => canReadRequest(currentUser, pr));
 
@@ -1505,19 +1506,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       selectedPrId,
       currentBranchScope,
       isSessionExpired,
-      users: !isAuthenticated ? users : currentUser?.roles.includes('admin')
+      users: !isAuthenticated ? users : (!isRequesterRole(currentUser) && currentUser?.roles.includes('admin'))
         ? users.filter(u => u.branchId === currentUser.branchId) : users.filter(u => u.id === currentUser?.id),
-      budgetPools: currentUser?.roles.length === 1 && currentUser.roles[0] === 'requester'
+      budgetPools: isRequesterRole(currentUser)
         ? permittedBudgetPools.map(b => ({ ...b, allocated: 0, adjustments: 0, held: 0, committed: 0, used: 0 }))
         : permittedBudgetPools,
       purchaseRequests: permittedPRs,
-      ledgerEntries: ledgerEntries.filter(x => permittedBudgetPools.some(b => b.id === x.budgetId)),
-      transfers: transfers.filter(t => (currentUser?.roles.includes('finance') || currentUser?.roles.includes('bod')) &&
+      ledgerEntries: isRequesterRole(currentUser) ? [] : ledgerEntries.filter(x => permittedBudgetPools.some(b => b.id === x.budgetId)),
+      transfers: transfers.filter(t => !isRequesterRole(currentUser) && (currentUser?.roles.includes('finance') || currentUser?.roles.includes('bod')) &&
         canSeeBranch(currentUser, budgetPools.find(b=>b.id === t.fromBudgetId)?.branchId || 'HQ')),
       delegations: delegations.filter(d => currentUser?.roles.includes('admin') || d.fromUserId === currentUser?.id || d.toUserId === currentUser?.id),
-      notifications: notifications.filter(n => n.userId === currentUser?.id),
-      auditLogs: auditLogs.filter(a => currentUser?.roles.includes('admin') || (currentUser?.roles.includes('bod') && true) || (currentUser?.roles.includes('finance') && a.userId === currentUser.id)),
-      accountingBatches: currentUser?.roles.some(r => ['accountant','finance','bod'].includes(r)) ? accountingBatches : [],
+      notifications: isRequesterRole(currentUser) ? [] : notifications.filter(n => n.userId === currentUser?.id),
+      auditLogs: isRequesterRole(currentUser) ? [] : auditLogs.filter(a => currentUser?.roles.includes('admin') || (currentUser?.roles.includes('bod') && true) || (currentUser?.roles.includes('finance') && a.userId === currentUser.id)),
+      accountingBatches: !isRequesterRole(currentUser) && currentUser?.roles.some(r => ['accountant','finance','bod'].includes(r)) ? accountingBatches : [],
       toasts,
       addToast,
       dismissToast,

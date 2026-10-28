@@ -10,11 +10,12 @@ import { formatVND, getPRStatusBadgeInfo } from '../utils/formatters';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { PRStatus, BranchCode } from '../types';
-import { canAccessScreen } from '../domain/rules';
+import { canAccessScreen, isRequesterRole } from '../domain/rules';
 import { Plus, Search, Filter, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 
 export const PurchaseRequestsView: React.FC = () => {
   const { purchaseRequests, currentBranchScope, navigateTo, currentUser } = useApp();
+  const requesterOnly = isRequesterRole(currentUser);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -25,6 +26,7 @@ export const PurchaseRequestsView: React.FC = () => {
   // Filter & Search
   const filteredPRs = useMemo(() => {
     return purchaseRequests.filter((pr) => {
+      if (requesterOnly && pr.createdById !== currentUser?.id) return false;
       // Phạm vi chi nhánh từ AppShell
       if (currentBranchScope !== 'ALL' && pr.branchId !== currentBranchScope) {
         return false;
@@ -58,14 +60,14 @@ export const PurchaseRequestsView: React.FC = () => {
 
       return true;
     });
-  }, [purchaseRequests, currentBranchScope, activeTab, statusFilter, searchTerm]);
+  }, [purchaseRequests, currentBranchScope, activeTab, statusFilter, searchTerm, currentUser?.id, requesterOnly]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredPRs.length / pageSize));
   const paginatedPRs = filteredPRs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const tabs = [
-    { id: 'ALL', label: 'Tất cả đề nghị', count: purchaseRequests.length },
+    { id: 'ALL', label: requesterOnly ? 'Đề nghị của tôi' : 'Tất cả đề nghị', count: purchaseRequests.length },
     {
       id: 'PENDING',
       label: 'Đang chờ duyệt',
@@ -97,9 +99,9 @@ export const PurchaseRequestsView: React.FC = () => {
       {/* Header & Primary CTA */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#202039] m-0">Đề nghị mua sắm</h1>
+          <h1 className="text-2xl font-bold text-[#202039] m-0">{requesterOnly ? 'Đề nghị của tôi' : 'Đề nghị mua sắm'}</h1>
           <p className="text-xs text-[#62657A] mt-1 m-0">
-            Quản lý toàn bộ vòng đời đề xuất mua sắm hàng hóa, vật tư và thiết bị nội bộ (UC-MS01..07)
+            {requesterOnly ? 'Chỉ hiển thị các đề nghị do bạn tạo. Bạn có thể lập mới, lưu nháp và theo dõi kết quả.' : 'Quản lý toàn bộ vòng đời đề xuất mua sắm hàng hóa, vật tư và thiết bị nội bộ (UC-MS01..07)'}
           </p>
         </div>
         {canAccessScreen(currentUser, 'PR_CREATE') && <Button
@@ -152,7 +154,7 @@ export const PurchaseRequestsView: React.FC = () => {
               setSearchTerm(e.target.value);
               setCurrentPage(1);
             }}
-            placeholder="Tìm theo mã (PR-2026-...), tên hàng hóa, người tạo..."
+            placeholder={requesterOnly ? 'Tìm trong các đề nghị của tôi...' : 'Tìm theo mã (PR-2026-...), tên hàng hóa, người tạo...'}
             className="w-full min-h-[40px] pl-9 pr-3 text-sm bg-white border border-[#DDE0EA] rounded-[10px] text-[#202039] focus:outline-none focus:border-[#5540C7]"
           />
         </div>

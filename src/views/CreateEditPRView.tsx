@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { isRequesterRole } from '../domain/rules';
 import { useApp } from '../context/AppContext';
 import { PRItem, PRAttachment } from '../types';
 import { formatVND } from '../utils/formatters';
@@ -73,7 +74,7 @@ export const CreateEditPRView: React.FC = () => {
   }, [items]);
 
   const totalTax = totalAmount - subtotal;
-  const showFinancialBalance = !currentUser?.roles.includes('requester') || currentUser.roles.length > 1;
+  const showFinancialBalance = !isRequesterRole(currentUser);
   const isBudgetExceeded = showFinancialBalance && totalAmount > availableBudget;
 
   const handleItemChange = (index: number, field: keyof PRItem, value: any) => {
@@ -221,7 +222,7 @@ export const CreateEditPRView: React.FC = () => {
             Lập đề nghị mua sắm nội bộ
           </h1>
           <p className="text-xs text-[#62657A] mt-1 m-0">
-            Nhập đầy đủ thông tin hàng hóa, chứng từ hỗ trợ và kiểm tra tác động nguồn ngân sách (SRS UC-MS01, UC-MS02, UC-MS03)
+            {isRequesterRole(currentUser) ? 'Nhập thông tin hàng hóa, thời hạn và hồ sơ đính kèm để gửi phê duyệt.' : 'Nhập đầy đủ thông tin hàng hóa, chứng từ hỗ trợ và kiểm tra tác động nguồn ngân sách (SRS UC-MS01, UC-MS02, UC-MS03)'}
           </p>
         </div>
 

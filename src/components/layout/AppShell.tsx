@@ -5,7 +5,7 @@
  * Tuân thủ chính xác Design System layout & spacing
  */
 
-import { canSeeBranch, canViewAllRegions, canViewDashboard, canAccessScreen } from '../../domain/rules';
+import { canSeeBranch, canViewAllRegions, canViewDashboard, canAccessScreen, isRequesterRole } from '../../domain/rules';
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ActiveScreen, BranchCode } from '../../types';
@@ -53,6 +53,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const requesterOnly = isRequesterRole(currentUser);
 
   // Quyền kiểm soát menu theo vai trò
   const isApprover =
@@ -70,7 +71,13 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
     visible: boolean;
   }
 
-  const navItems: { group: string; items: NavItem[] }[] = [
+  const navItems: { group: string; items: NavItem[] }[] = requesterOnly ? [{
+    group: 'Đề nghị mua sắm',
+    items: [
+      { id: 'PR_LIST', label: 'Đề nghị của tôi', icon: <FileText className="w-4 h-4" />, visible: true },
+      { id: 'PR_CREATE', label: 'Lập đề nghị', icon: <FileText className="w-4 h-4" />, visible: true },
+    ],
+  }] : [
     {
       group: 'Tổng quan & Nghiệp vụ',
       items: [
@@ -309,7 +316,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
             {/* Scope Filter Dropdown */}
             <div className="flex items-center gap-2">
               <Building2 className="w-4 h-4 text-[#5540C7] hidden sm:block" />
-              {canViewDashboard(currentUser) && <select
+              {!requesterOnly && canViewDashboard(currentUser) && <select
                 value={currentBranchScope}
                 onChange={(e) => setBranchScope(e.target.value as BranchCode | 'ALL')}
                 className="text-xs sm:text-sm font-semibold bg-[#F7F8FC] border border-[#DDE0EA] rounded-[8px] px-2.5 py-1.5 text-[#202039] focus:outline-none focus:border-[#5540C7] cursor-pointer"
@@ -321,7 +328,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
                   </option>
                 ))}
               </select>}
-              {!canViewDashboard(currentUser) && <span className="text-xs font-semibold text-[#62657A]">Phạm vi: {currentUser?.branchId}</span>}
+              {requesterOnly ? <span className="text-xs font-semibold text-[#62657A]">Không gian cá nhân</span> : !canViewDashboard(currentUser) && <span className="text-xs font-semibold text-[#62657A]">Phạm vi: {currentUser?.branchId}</span>}
             </div>
           </div>
 
@@ -365,8 +372,8 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
               )}
             </div>
 
-            {/* Notification Bell */}
-            <button
+            {/* Notification Bell - không có màn thông báo độc lập cho nhân viên đề nghị */}
+            {!requesterOnly && <button
               type="button"
               onClick={() => navigateTo('NOTIFICATIONS')}
               className="relative p-2 rounded-[8px] text-[#62657A] hover:text-[#202039] hover:bg-[#F7F8FC] cursor-pointer"
@@ -376,7 +383,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
               {unreadCount > 0 && (
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#B42336]" />
               )}
-            </button>
+            </button>}
 
             {/* Account Menu */}
             <div className="relative">

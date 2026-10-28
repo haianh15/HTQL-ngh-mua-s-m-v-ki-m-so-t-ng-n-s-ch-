@@ -38,7 +38,7 @@ export function eligibleDelegation(user: User, pr: PurchaseRequest, role: string
     (!d.maxAmountLimit || pr.totalAmount <= d.maxAmountLimit));
 }
 export function canApproveStep(user: User | null, pr: PurchaseRequest, ds: Delegation[]): boolean {
-  if (!user || !user.isActive || user.id === pr.createdById) return false;
+  if (!user || !user.isActive || isRequesterRole(user) || user.id === pr.createdById) return false;
   if (!['PENDING_DEPT','PENDING_FINANCE','PENDING_FINAL'].includes(pr.status)) return false;
   const step = pr.approvalTimeline[pr.currentStepIndex];
   if (!step || step.status !== 'PENDING') return false;
@@ -49,7 +49,7 @@ export function canApproveStep(user: User | null, pr: PurchaseRequest, ds: Deleg
 }
 export function canSeeBranch(user: User | null, branchId: string): boolean {
   if (!user || !user.isActive) return false;
-  if (user.roles.includes('bod')) return true;
+  if (!isRequesterRole(user) && user.roles.includes('bod')) return true;
   return user.branchId === branchId;
 }
 export function reserveBudget(budget: BudgetPool, amount: number): BudgetPool {
@@ -81,18 +81,26 @@ export function transferBudget(from: BudgetPool, to: BudgetPool, amount: number)
   ];
 }
 
+// Vai trò requester là tài khoản nhân viên tối thiểu: không kế thừa quyền
+// Dashboard/Báo cáo từ vai trò cũ lưu trong dữ liệu demo hoặc từ cấu hình trùng vai trò.
+// Backend thật phải dùng cùng chính sách deny-by-default.
+export function isRequesterRole(user: User | null): boolean {
+  return !!user?.isActive && user.roles.includes('requester');
+}
+
 // Các quyền hiển thị là quy định tách biệt với bước phê duyệt nghiệp vụ.
 // Chỉ BOD/Tổng Giám đốc được xem toàn bộ HQ và năm chi nhánh.
 export function canViewAllRegions(user: User | null): boolean {
-  return !!user?.isActive && user.roles.includes('bod');
+  return !!user?.isActive && !isRequesterRole(user) && user.roles.includes('bod');
 }
 export function canViewDashboard(user: User | null): boolean {
-  return !!user?.isActive && user.roles.some(r =>
+  return !!user?.isActive && !isRequesterRole(user) && user.roles.some(r =>
     ['bod', 'branch_director', 'finance', 'procurement', 'accountant'].includes(r)
   );
 }
 export function canReadRequest(user: User | null, pr: PurchaseRequest): boolean {
   if (!user?.isActive || !canSeeBranch(user, pr.branchId)) return false;
+  if (isRequesterRole(user)) return pr.createdById === user.id;
   if (user.roles.includes('bod')) return true;
   if (user.roles.includes('branch_director')) return true; // Chỉ chi nhánh được giao
   if (user.roles.some(r => ['finance', 'procurement', 'accountant'].includes(r))) return true;
@@ -107,6 +115,11 @@ export type ProtectedScreen =
   | 'ADMIN_MANAGEMENT' | 'FORBIDDEN_403' | 'AUTH_LOGIN' | 'AUTH_MFA' | 'AUTH_FORGOT_PW';
 export function canAccessScreen(user: User | null, screen: ProtectedScreen): boolean {
   if (!user?.isActive) return false;
+  // Nhân viên: chỉ xem/lập và cập nhật đề nghị CỦA CHÍNH MÌNH.
+  // PR_DETAIL và PR_EDIT là màn hình con; quyền truy cập hồ sơ được kiểm tra riêng.
+  if (isRequesterRole(user)) return [
+    'PR_LIST', 'PR_CREATE', 'PR_EDIT', 'PR_DETAIL', 'FORBIDDEN_403',
+  ].includes(screen);
   if (screen === 'FORBIDDEN_403' || screen === 'NOTIFICATIONS') return true;
   if (screen === 'ADMIN_MANAGEMENT') return user.roles.includes('admin');
   if (screen === 'DASHBOARD') return canViewDashboard(user);
@@ -123,8 +136,8 @@ export function canAccessScreen(user: User | null, screen: ProtectedScreen): boo
   return false;
 }
 export function defaultScreenFor(user: User): ProtectedScreen {
+  if (isRequesterRole(user)) return 'PR_LIST';
   if (user.roles.includes('admin') && user.roles.length === 1) return 'ADMIN_MANAGEMENT';
-  if (user.roles.includes('requester') && user.roles.length === 1) return 'PR_LIST';
   if (user.roles.includes('dept_head') && !user.roles.some(r => ['bod','branch_director','finance'].includes(r))) return 'APPROVAL_QUEUE';
   return canViewDashboard(user) ? 'DASHBOARD' : 'PR_LIST';
 }
