@@ -6,6 +6,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { isRequesterRole } from '../domain/rules';
+import { analyzeDraft, suggestDraftWording } from '../ai/insights';
+import type { DraftInput, InsightReport, WritingSuggestion } from '../ai/insights';
+import { InsightCard } from '../components/ai/InsightCard';
 import { useApp } from '../context/AppContext';
 import { PRItem, PRAttachment } from '../types';
 import { formatVND } from '../utils/formatters';
@@ -52,6 +55,15 @@ export const CreateEditPRView: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [aiCheckResult, setAiCheckResult] = useState<InsightReport | null>(null);
+  const [writingSuggestion, setWritingSuggestion] = useState<WritingSuggestion | null>(null);
+  const [awaitingAiAcknowledgement, setAwaitingAiAcknowledgement] = useState(false);
+  const [reviewedDraftFingerprint, setReviewedDraftFingerprint] = useState('');
+
+  const currentDraftForAI = (): DraftInput => ({
+    title, purpose, needByDate, budgetId: selectedBudgetId, departmentId: currentUser?.departmentId || '',
+    branchId: currentUser?.branchId || '', items, attachments, excludePrId: editingPR?.id,
+  });
   // Không mở PR_DETAIL ngay sau setPurchaseRequests: React chưa kịp công bố hồ sơ mới.
   // Chỉ điều hướng khi hồ sơ đã có trong state và người dùng có quyền đọc.
   const [pendingDetailId, setPendingDetailId] = useState<string | null>(null);
@@ -178,12 +190,26 @@ export const CreateEditPRView: React.FC = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (isDraft = false) => {
+  const handleSubmit = (isDraft = false, acknowledgedAiWarning = false) => {
     if (!isDraft && !validate()) {
       addToast('Vui lòng kiểm tra lại các trường thông tin có lỗi bên dưới.', 'error');
       return;
     }
-
+    if (!isDraft) {
+      // Mỗi lần gửi đều kiểm tra trên dữ liệu hiện tại; AI không sửa nghiệp vụ và không tự từ chối.
+      const snapshot = currentDraftForAI();
+      const report = analyzeDraft(snapshot, purchaseRequests);
+      setAiCheckResult(report);
+      const fingerprint = JSON.stringify(snapshot);
+      const hasWarnings = report.insights.some(item => item.level === 'warning');
+      if (hasWarnings && (!acknowledgedAiWarning || fingerprint !== reviewedDraftFingerprint)) {
+        setReviewedDraftFingerprint(fingerprint);
+        setAwaitingAiAcknowledgement(true);
+        addToast('Đã hiển thị các cảnh báo để bạn xem xét trước khi gửi.', 'warning');
+        return;
+      }
+    }
+    setAwaitingAiAcknowledgement(false);
     setIsSubmitting(true);
     setTimeout(() => {
       if (editingPR) {
@@ -451,6 +477,31 @@ export const CreateEditPRView: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* AI: không đọc dữ liệu ngoài quyền, không quyết định thay người sử dụng. */}
+        <section className="mb-6 bg-[#F7F8FC] border border-[#DDE0EA] rounded-[16px] p-4 sm:p-5 space-y-3">
+          <h2 className="font-bold text-base text-[#202039] flex items-center gap-2">Trợ lý kiểm tra và soạn đề nghị</h2>
+          <p className="text-xs text-[#62657A]">Bản demo phân tích theo quy tắc, chưa kết nối mô hình AI. Chỉ so sánh hồ sơ được phép xem; không gửi dữ liệu ra bên ngoài.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setAiCheckResult(analyzeDraft(currentDraftForAI(), purchaseRequests))}>Kiểm tra đề nghị</Button>
+            <Button variant="secondary" onClick={() => setWritingSuggestion(suggestDraftWording(currentDraftForAI(), currentUser?.departmentName || 'đơn vị'))}>Gợi ý viết mục đích / thông số</Button>
+          </div>
+          {aiCheckResult && <InsightCard title="Kết quả kiểm tra đề nghị" report={aiCheckResult} />}
+          {awaitingAiAcknowledgement && <div className="bg-[#FFF3D6] border border-[#EEDCA4] rounded-[10px] p-3 space-y-2">
+            <p className="text-xs text-[#875000]">Có cảnh báo cần xem xét. Bạn có thể bổ sung nội dung hoặc xác nhận tiếp tục gửi; hệ thống không tự từ chối đề nghị.</p>
+            <Button variant="primary" onClick={() => handleSubmit(false, true)}>Tôi đã xem cảnh báo, tiếp tục gửi đề nghị</Button>
+          </div>}
+          {writingSuggestion && <div className="bg-white border border-[#DDE0EA] rounded-[10px] p-4 space-y-3">
+            <div className="font-bold text-sm text-[#202039]">Gợi ý nội dung (cần người lập xác minh)</div>
+            <div className="text-xs text-[#62657A] whitespace-pre-wrap">{writingSuggestion.purpose}</div>
+            <Button variant="secondary" size="small" onClick={() => setPurpose(writingSuggestion.purpose)}>Dùng nội dung gợi ý cho mục đích</Button>
+            {writingSuggestion.specifications.map((item, i) => <div key={item.id} className="text-xs text-[#62657A]">
+              <span className="font-semibold text-[#202039]">Thông số hạng mục {i + 1}: </span>{item.suggestion}
+            </div>)}
+            <p className="text-[11px] text-[#875000]">{writingSuggestion.note}</p>
+            <button type="button" className="text-xs text-[#5540C7] underline" onClick={() => setWritingSuggestion(null)}>Ẩn gợi ý</button>
+          </div>}
+        </section>
 
         {/* Cảnh báo kiểm tra ngân sách sơ bộ (TO-BE 01 Step 2) */}
         {showFinancialBalance && <div className="mb-6">

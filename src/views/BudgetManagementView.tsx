@@ -5,7 +5,9 @@
  * Quản lý nguồn ngân sách, điều chỉnh/chuyển nguồn (TO-BE 03) và nhật ký biến động (Ledger)
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { analyzeBudgets } from '../ai/insights';
+import { InsightCard } from '../components/ai/InsightCard';
 import { useApp } from '../context/AppContext';
 import { formatVND } from '../utils/formatters';
 import { heldForRequest, canManageBudget } from '../domain/rules';
@@ -71,6 +73,13 @@ export const BudgetManagementView: React.FC = () => {
   );
 
   const waitingFundsPRs = purchaseRequests.filter((pr) => pr.status === 'WAITING_FUNDS');
+  // Dữ liệu được AppContext lọc theo RBAC; tiếp tục khóa phạm vi chi nhánh được chọn.
+  const aiBudgetReport = useMemo(() => {
+    const authorizedBudgetIds = new Set(filteredBudgets.map(b=>b.id));
+    return analyzeBudgets(filteredBudgets,
+      ledgerEntries.filter(e=>authorizedBudgetIds.has(e.budgetId)),
+      purchaseRequests.filter(pr=>authorizedBudgetIds.has(pr.budgetId)));
+  }, [budgetPools, currentBranchScope, ledgerEntries, purchaseRequests]);
   const financeCanRelease = canManageBudget(currentUser);
   // Only requests that were actually taken up by purchasing and have an
   // uncommitted balance can be reviewed for release. Confirmation is manual
@@ -202,6 +211,7 @@ export const BudgetManagementView: React.FC = () => {
       {/* Tab 1: Tổng quan nguồn ngân sách */}
       {activeTab === 'OVERVIEW' && (
         <div className="space-y-6">
+          <InsightCard title="Phân tích ngân sách & cảnh báo bất thường" report={aiBudgetReport} />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredBudgets.map((b) => {
               const currentLimit = b.allocated + (b.adjustments || 0);

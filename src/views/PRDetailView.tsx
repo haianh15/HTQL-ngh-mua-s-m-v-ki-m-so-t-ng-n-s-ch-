@@ -25,7 +25,9 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { PRItem } from '../types';
-import { canApproveStep, canAccessScreen, isRequesterRole } from '../domain/rules';
+import { canApproveStep, canAccessScreen, canReadBudget, isRequesterRole } from '../domain/rules';
+import { analyzeApproval } from '../ai/insights';
+import { InsightCard } from '../components/ai/InsightCard';
 
 export const PRDetailView: React.FC = () => {
   const {
@@ -332,7 +334,14 @@ export const PRDetailView: React.FC = () => {
               )}
             </div>
 
-            {/* Tiến trình duyệt */}
+            {/* Trợ lý tóm tắt và lưu ý dành cho người có quyền phê duyệt. */}
+          {canAccessScreen(currentUser, 'APPROVAL_QUEUE') && pr.createdById !== currentUser?.id &&
+            <div className="mb-5">
+              <InsightCard title="Hỗ trợ đánh giá hồ sơ trước phê duyệt"
+                report={analyzeApproval(pr, purchaseRequests, budget && canReadBudget(currentUser, budget) ? budget : undefined, !!budget && canReadBudget(currentUser, budget))} />
+            </div>}
+
+          {/* Tiến trình duyệt */}
             <div className="pt-4 border-t border-[#DDE0EA]">
               <ApprovalTimeline
                 timeline={pr.approvalTimeline}
