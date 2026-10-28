@@ -135,6 +135,25 @@ export const INITIAL_USERS: User[] = [
     isActive: true,
     requiresMfa: true,
   },
+  // Người duyệt độc lập dùng riêng cho demo khi chính Tài chính lập đề nghị.
+  {
+    id: 'usr_finance_alt_hq', name: 'Người kiểm soát Tài chính thứ hai (Demo)',
+    email: 'finance.reviewer@procure.vn', roles: ['finance'], branchId: 'HQ',
+    departmentId: 'DEP_FIN_HQ', departmentName: 'Phòng Tài chính - Kế toán',
+    title: 'Người kiểm soát nguồn ngân sách độc lập', isActive: true, requiresMfa: true,
+  },
+  {
+    id: 'usr_finance_hcm', name: 'Tài chính chi nhánh TP.HCM (Demo)',
+    email: 'finance.hcm@procure.vn', roles: ['finance'], branchId: 'BR_HCM',
+    departmentId: 'DEP_OPS_HCM', departmentName: 'Tài chính khu vực TP.HCM',
+    title: 'Chuyên viên kiểm soát ngân sách khu vực', isActive: true, requiresMfa: true,
+  },
+  {
+    id: 'usr_finance_hcm_alt', name: 'Tài chính TP.HCM thứ hai (Demo)',
+    email: 'finance.hcm.reviewer@procure.vn', roles: ['finance'], branchId: 'BR_HCM',
+    departmentId: 'DEP_OPS_HCM', departmentName: 'Tài chính khu vực TP.HCM',
+    title: 'Người duyệt ngân sách độc lập tại chi nhánh', isActive: true, requiresMfa: true,
+  },
   {
     id: 'usr_procurement',
     name: 'Hoàng Thị Mai',
@@ -172,6 +191,12 @@ export const INITIAL_USERS: User[] = [
     requiresMfa: true,
   },
   {
+    id: 'usr_bod_alt', name: 'Thành viên Ban Giám đốc thứ hai (Demo)',
+    email: 'bod.reviewer@procure.vn', roles: ['bod'], branchId: 'HQ',
+    departmentId: 'DEP_FIN_HQ', departmentName: 'Ban Giám đốc',
+    title: 'Thành viên Ban Giám đốc – phê duyệt độc lập', isActive: true, requiresMfa: true,
+  },
+  {
     id: 'usr_admin',
     name: 'Lê Hải Long',
     email: 'long.le@procure.vn',
@@ -186,6 +211,12 @@ export const INITIAL_USERS: User[] = [
 ];
 
 export const INITIAL_BUDGET_POOLS: BudgetPool[] = [
+  {
+    id:'BG-2026-HQ-FIN', name:'Hoạt động Tài chính – Kế toán HQ (Demo)', fiscalYear:2026,
+    branchId:'HQ', departmentId:'DEP_FIN_HQ', departmentName:'Phòng Tài chính - Kế toán',
+    category:'OPERATIONS', categoryName:'Vận hành phòng ban',
+    allocated:100000000, adjustments:0, held:0, committed:0, used:0,
+  },
   {
     id: 'BG-2026-HQ-PROD',
     name: 'Thiết bị & Công cụ · Phòng Sản phẩm · Q4/2026',

@@ -1,6 +1,6 @@
 /** Pure domain rules shared by the demo UI and executable regression tests.
  * This browser prototype is NOT a server-side financial transaction engine. */
-import type { BudgetPool, PurchaseRequest, Delegation, User, PRItem } from '../types';
+import type { BudgetPool, PurchaseRequest, Delegation, User, PRItem, ApprovalDecision } from '../types';
 export const DEMO_PASSWORD = 'Procure@2026';
 export const DEMO_OTP = '123456';
 export const availableBudget = (b: BudgetPool): number =>
@@ -105,6 +105,9 @@ export function canReadRequest(user: User | null, pr: PurchaseRequest): boolean 
   const role=primaryRole(user);
   if (!role || role==='admin') return false;
   if (role==='requester') return pr.createdById === user!.id;
+  // Mọi tác nhân được phép lập phiếu đều xem lại được phiếu của chính mình,
+  // dù đang chờ trưởng phòng/Tài chính và chưa nằm trong luồng chuyên môn của họ.
+  if (pr.createdById === user!.id) return true;
   // Bản nháp là dữ liệu riêng tư, không hiển thị cho trưởng phòng, tài chính hay lãnh đạo.
   if (pr.status==='DRAFT' && pr.createdById!==user!.id) return false;
   if (!canSeeBranch(user,pr.branchId)) return false;
@@ -117,6 +120,61 @@ export function canReadRequest(user: User | null, pr: PurchaseRequest): boolean 
     return pr.status !== 'DRAFT' || pr.createdById === user!.id;
   return false;
 }
+/** Tuyến duyệt theo tác nhân lập phiếu. Không lặp bước Trưởng phòng cho cấp khác. */
+export function buildApprovalTimeline(creator: User, amount: number, users: User[]): ApprovalDecision[] {
+  const role = primaryRole(creator);
+  if (!role || !['requester','finance','branch_director','bod'].includes(role))
+    throw new Error('Vai trò này không được cấp quyền lập đề nghị.');
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('Giá trị đề nghị không hợp lệ.');
+
+  const steps: ApprovalDecision[] = [];
+  const available = (r: ActorRole, sameBranch = true) => users.find(u =>
+    u.isActive && u.id !== creator.id && primaryRole(u) === r &&
+    (!sameBranch || u.branchId === creator.branchId) &&
+    (r !== 'dept_head' || u.departmentId === creator.departmentId));
+
+  if (role === 'requester') {
+    const head = available('dept_head');
+    steps.push({ step:'DEPT_CONFIRMATION', stepName:'Trưởng phòng xác nhận nhu cầu',
+      assignedRole:'dept_head', assignedToName:head?.name || 'Trưởng phòng (chờ phân công)', status:'PENDING' });
+  }
+
+  const finance = available('finance');
+  steps.push({ step:'FINANCE_CHECK', stepName: role === 'finance'
+      ? 'Tài chính khác kiểm tra, duyệt đề nghị (không tự duyệt)'
+      : 'Tài chính kiểm tra nguồn ngân sách',
+    assignedRole:'finance', assignedToName:finance?.name || 'Tài chính khu vực (chờ phân công)', status:'PENDING' });
+
+  // Ngưỡng duyệt cuối; dưới 10 triệu, phiếu do cấp khác lập kết thúc ở Tài chính,
+  // không quay ngược lại Trưởng phòng. Phiếu nhân viên vẫn theo hạn mức BRD.
+  let finalRole: ActorRole | null = amount >= 50_000_000 ? 'bod'
+    : amount >= 10_000_000 ? 'branch_director'
+    : role === 'requester' ? 'dept_head' : null;
+  // Giám đốc chi nhánh tự lập phiếu: chuyển cấp cao hơn, không tự duyệt.
+  if (finalRole === 'branch_director' && !available('branch_director'))
+    finalRole = 'bod'; // Chưa có giám đốc vùng phù hợp hoặc người lập chính là người duyệt duy nhất: chuyển cấp cao hơn.
+  if (finalRole) {
+    const reviewer = available(finalRole, finalRole !== 'bod');
+    steps.push({ step:'FINAL_APPROVAL',
+      stepName: finalRole === 'bod' ? 'Ban Giám đốc phê duyệt'
+        : finalRole === 'branch_director' ? 'Giám đốc chi nhánh / đơn vị phê duyệt'
+        : 'Trưởng đơn vị phê duyệt theo hạn mức dưới 10 triệu',
+      assignedRole: finalRole,
+      assignedToName: reviewer?.name || `${finalRole} (chờ phân công người khác)`,
+      status:'PENDING' });
+  }
+  return steps;
+}
+
+/** Trạng thái ứng với bước đang chờ thực sự, không dựa trên chỉ số cố định. */
+export function statusForApprovalStep(steps: ApprovalDecision[], index = 0): PurchaseRequest['status'] {
+  const step=steps[index];
+  if (!step) throw new Error('Không có bước duyệt hợp lệ.');
+  if (step.step === 'FINANCE_CHECK') return 'PENDING_FINANCE';
+  if (step.step === 'DEPT_CONFIRMATION') return 'PENDING_DEPT';
+  return 'PENDING_FINAL';
+}
+
 export function canManageBudget(user:User|null):boolean {return primaryRole(user)==='finance';}
 export function canExecutePurchase(user:User|null):boolean {return primaryRole(user)==='procurement';}
 export function canReconcile(user:User|null):boolean {return primaryRole(user)==='accountant';}
@@ -130,11 +188,11 @@ export type ProtectedScreen =
 const ROLE_SCREENS: Record<ActorRole, readonly ProtectedScreen[]> = {
   requester:['PR_LIST','PR_CREATE','PR_EDIT','PR_DETAIL'],
   dept_head:['PR_LIST','PR_DETAIL','APPROVAL_QUEUE','NOTIFICATIONS'],
-  finance:['DASHBOARD','PR_LIST','PR_DETAIL','APPROVAL_QUEUE','BUDGET_OVERVIEW','BUDGET_TRANSFERS','BUDGET_WAITING_PR','REPORTS','NOTIFICATIONS'],
+  finance:['DASHBOARD','PR_LIST','PR_CREATE','PR_EDIT','PR_DETAIL','APPROVAL_QUEUE','BUDGET_OVERVIEW','BUDGET_TRANSFERS','BUDGET_WAITING_PR','REPORTS','NOTIFICATIONS'],
   procurement:['DASHBOARD','PR_LIST','PR_DETAIL','EXECUTION_LIST','REPORTS','NOTIFICATIONS'],
   accountant:['DASHBOARD','PR_LIST','PR_DETAIL','RECONCILIATION_IMPORT','REPORTS','NOTIFICATIONS'],
-  branch_director:['DASHBOARD','PR_LIST','PR_DETAIL','APPROVAL_QUEUE','REPORTS','NOTIFICATIONS'],
-  bod:['DASHBOARD','PR_LIST','PR_DETAIL','APPROVAL_QUEUE','BUDGET_OVERVIEW','BUDGET_TRANSFERS','BUDGET_WAITING_PR','REPORTS','NOTIFICATIONS'],
+  branch_director:['DASHBOARD','PR_LIST','PR_CREATE','PR_EDIT','PR_DETAIL','APPROVAL_QUEUE','REPORTS','NOTIFICATIONS'],
+  bod:['DASHBOARD','PR_LIST','PR_CREATE','PR_EDIT','PR_DETAIL','APPROVAL_QUEUE','BUDGET_OVERVIEW','BUDGET_TRANSFERS','BUDGET_WAITING_PR','REPORTS','NOTIFICATIONS'],
   admin:['ADMIN_MANAGEMENT'],
 };
 export function canAccessScreen(user: User|null, screen:ProtectedScreen):boolean {

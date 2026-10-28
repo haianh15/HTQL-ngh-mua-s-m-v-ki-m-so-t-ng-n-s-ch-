@@ -5,12 +5,17 @@
  */
 
 import React from 'react';
+import { defaultScreenFor } from '../../domain/rules';
 import { useApp } from '../../context/AppContext';
 import { Button } from '../common/Button';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
 
 export const ForbiddenPage: React.FC = () => {
   const { currentUser, navigateTo } = useApp();
+  const homeScreen = currentUser ? defaultScreenFor(currentUser) : 'AUTH_LOGIN';
+  const homeLabel = homeScreen === 'PR_LIST' ? 'Đề nghị của tôi'
+    : homeScreen === 'APPROVAL_QUEUE' ? 'Hàng chờ phê duyệt'
+    : homeScreen === 'ADMIN_MANAGEMENT' ? 'Quản trị hệ thống' : 'Tổng quan';
 
   return (
     <div className="min-h-[70vh] flex flex-col items-center justify-center text-center p-6">
@@ -34,10 +39,10 @@ export const ForbiddenPage: React.FC = () => {
       <div className="flex gap-3">
         <Button
           variant="primary"
-          onClick={() => navigateTo('DASHBOARD')}
+          onClick={() => navigateTo(homeScreen)}
           icon={<ArrowLeft className="w-4 h-4" />}
         >
-          Về trang Tổng quan của tôi
+          Về {homeLabel}
         </Button>
       </div>
     </div>

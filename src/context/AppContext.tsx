@@ -34,7 +34,7 @@ import {
   INITIAL_AUDIT_LOGS,
 } from '../data/initialData';
 import { ToastMessage } from '../components/common/Toast';
-import { DEMO_PASSWORD, DEMO_OTP, availableBudget, canSeeBranch, canApproveStep, canViewAllRegions, canReadRequest, canAccessScreen, defaultScreenFor, isValidPRItems, isValidAmount, reserveBudget, commitBudget, recognizeExpense, releaseHold, transferBudget, heldForRequest, isRequesterRole, primaryRole, canReadBudget, canSeeFinancialFigures, canManageBudget, canExecutePurchase, canReconcile, canManageUsers } from '../domain/rules';
+import { DEMO_PASSWORD, DEMO_OTP, availableBudget, canSeeBranch, canApproveStep, canViewAllRegions, canReadRequest, canAccessScreen, defaultScreenFor, isValidPRItems, isValidAmount, reserveBudget, commitBudget, recognizeExpense, releaseHold, transferBudget, heldForRequest, isRequesterRole, primaryRole, canReadBudget, canSeeFinancialFigures, canManageBudget, canExecutePurchase, canReconcile, canManageUsers, buildApprovalTimeline, statusForApprovalStep } from '../domain/rules';
 
 interface AppContextType {
   // Auth state
@@ -143,7 +143,10 @@ const loadDemo = <T,>(key: string, fallback: T): T => {
 };
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Users and Auth State
-  const [users, setUsers] = useState<User[]>(() => loadDemo('users', INITIAL_USERS));
+  const [users, setUsers] = useState<User[]>(() => {
+    const stored = loadDemo('users', INITIAL_USERS);
+    return [...stored, ...INITIAL_USERS.filter(u => u.id.startsWith('usr_finance_alt') || u.id.startsWith('usr_bod_alt') || u.id.startsWith('usr_finance_hcm')).filter(u => !stored.some(old => old.id === u.id))];
+  });
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [mfaPendingUser, setMfaPendingUser] = useState<User | null>(null);
@@ -153,7 +156,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isSessionExpired, setIsSessionExpired] = useState<boolean>(false);
 
   // Core Data
-  const [budgetPools, setBudgetPools] = useState<BudgetPool[]>(() => loadDemo('budgetPools', INITIAL_BUDGET_POOLS));
+  const [budgetPools, setBudgetPools] = useState<BudgetPool[]>(() => {
+    const stored = loadDemo('budgetPools', INITIAL_BUDGET_POOLS);
+    return [...stored, ...INITIAL_BUDGET_POOLS.filter(b => b.id.startsWith('BG-2026-HQ-FIN')).filter(b => !stored.some(old => old.id === b.id))];
+  });
   const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>(() => loadDemo('purchaseRequests', INITIAL_PURCHASE_REQUESTS));
   const [ledgerEntries, setLedgerEntries] = useState<BudgetLedgerEntry[]>(() => loadDemo('ledgerEntries', INITIAL_LEDGER_ENTRIES));
   const [transfers, setTransfers] = useState<BudgetTransferRequest[]>(() => loadDemo('transfers', INITIAL_TRANSFERS));
@@ -231,8 +237,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const navigateTo = (screen: ActiveScreen, prId: string | null = null) => {
     if (isAuthenticated && !canAccessScreen(currentUser, screen)) {
+      // Không phá màn hình hiện tại khi một thao tác UI cố mở chức năng bị chặn.
+      // Router vẫn có chốt chặn độc lập; việc từ chối không cấp thêm quyền nào.
       addToast('Bạn không có quyền truy cập chức năng này.', 'error');
-      setActiveScreen('FORBIDDEN_403');
       return;
     }
     // Kiểm soát quyền truy cập theo từng hồ sơ, không chỉ theo tên màn hình.
@@ -242,9 +249,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const targetPR = purchaseRequests.find(p => p.id === targetId);
       if (!targetPR || !canReadRequest(currentUser, targetPR) ||
           (screen === 'PR_EDIT' && (targetPR.createdById !== currentUser?.id || targetPR.status !== 'DRAFT'))) {
-        addToast('Bạn chỉ có thể truy cập đề nghị thuộc quyền của mình.', 'error');
-        setSelectedPrId(null);
-        setActiveScreen('FORBIDDEN_403');
+        addToast(targetPR
+          ? 'Bạn không có quyền truy cập đề nghị này.'
+          : 'Hồ sơ chưa sẵn sàng hoặc không tồn tại. Vui lòng mở lại từ danh sách đề nghị.', 'error');
+        // Giữ nguyên màn hình thay vì đẩy người dùng vào trang 403 không cần thiết.
         return;
       }
     }
@@ -377,35 +385,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // PR CRUD
   const createPurchaseRequest = (data: Partial<PurchaseRequest>, items: PRItem[], isDraft = false): string => {
-    if (!currentUser || !currentUser.isActive || primaryRole(currentUser)!=='requester') { addToast('Bạn không có quyền tạo đề nghị.', 'error'); return ''; }
+    if (!currentUser || !canAccessScreen(currentUser, 'PR_CREATE')) {
+      addToast('Bạn không có quyền tạo đề nghị.', 'error'); return '';
+    }
     if (!isDraft && !isValidPRItems(items)) { addToast('Danh sách hạng mục chưa hợp lệ.', 'error'); return ''; }
-    if (!data.budgetId || !budgetPools.some(b => b.id === data.budgetId && b.branchId === currentUser.branchId && b.departmentId === currentUser.departmentId)) {
-      addToast('Nguồn ngân sách không thuộc phạm vi được phép.', 'error'); return '';
+    if (!data.budgetId || !budgetPools.some(b => b.id === data.budgetId &&
+        b.branchId === currentUser.branchId && b.departmentId === currentUser.departmentId)) {
+      addToast('Nguồn ngân sách không thuộc phạm vi phòng ban được phép.', 'error'); return '';
     }
     const prNumber = Math.max(43, ...purchaseRequests.map(pr=>Number(pr.id.match(/PR-2026-(\d+)/)?.[1] || 0))) + 1;
     const newPrId = `PR-2026-${String(prNumber).padStart(3,'0')}`;
     const totalAmount = items.reduce((sum, it) => sum + it.totalPrice, 0);
-
-    const budget = budgetPools.find(b=>b.id===data.budgetId && b.branchId===currentUser.branchId && b.departmentId===currentUser.departmentId)!;
-    const available = budget.allocated + (budget.adjustments || 0) - budget.held - budget.committed - budget.used;
-
-    // Xác định cấp duyệt cuối theo BRD:
-    // < 10M: Trưởng đơn vị
-    // 10M - < 50M: Giám đốc chi nhánh / Trụ sở
-    // >= 50M: Ban Giám đốc (BOD)
-    let finalStepName = 'Phê duyệt cấp Trưởng đơn vị (< 10.000.000 ₫)';
-    let finalRole: User['roles'][0] = 'dept_head';
-    let finalAssignee = 'Trần Văn Bình';
-
-    if (totalAmount >= 50000000) {
-      finalStepName = 'Ban Giám đốc phê duyệt (Hạn mức ≥ 50.000.000 ₫)';
-      finalRole = 'bod';
-      finalAssignee = 'Vũ Đình Trọng';
-    } else if (totalAmount >= 10000000) {
-      finalStepName = 'Giám đốc chi nhánh / Đơn vị phê duyệt (10M - 50M)';
-      finalRole = 'branch_director';
-      finalAssignee = 'Lê Thị Cúc';
-    }
+    const budget = budgetPools.find(b => b.id === data.budgetId)!;
+    const available = availableBudget(budget);
+    // Gửi người đúng thẩm quyền; người lập là finance không thể tự kiểm tra/duyệt.
+    const timeline = !isDraft && totalAmount > 0 ? buildApprovalTimeline(currentUser, totalAmount, users) : [];
+    const firstStep = timeline[0];
 
     const initialVersion = {
       versionNumber: 1,
@@ -430,39 +425,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       departmentName: currentUser?.departmentName || 'Phòng Sản phẩm',
       budgetId: budget.id,
       budgetName: budget.name,
-      status: isDraft ? 'DRAFT' : 'PENDING_DEPT',
+      status: isDraft ? 'DRAFT' : statusForApprovalStep(timeline),
       currentVersion: 1,
       effectiveVersion: 1,
       versions: [initialVersion],
       items,
       totalAmount,
       attachments: data.attachments || [],
-      approvalTimeline: [
-        {
-          step: 'DEPT_CONFIRMATION',
-          stepName: 'Trưởng phòng xác nhận nhu cầu',
-          assignedRole: 'dept_head',
-          assignedToName: 'Trần Văn Bình',
-          status: 'PENDING',
-        },
-        {
-          step: 'FINANCE_CHECK',
-          stepName: 'Tài chính kiểm tra nguồn ngân sách',
-          assignedRole: 'finance',
-          assignedToName: 'Phạm Hoàng Dũng',
-          status: 'PENDING',
-        },
-        {
-          step: 'FINAL_APPROVAL',
-          stepName: finalStepName,
-          assignedRole: finalRole,
-          assignedToName: finalAssignee,
-          status: 'PENDING',
-        },
-      ],
+      approvalTimeline: timeline,
       currentStepIndex: 0,
-      currentAssigneeRole: 'dept_head',
-      currentAssigneeName: 'Trần Văn Bình',
+      currentAssigneeRole: firstStep?.assignedRole || 'finance',
+      currentAssigneeName: firstStep?.assignedToName,
       createdById: currentUser?.id || 'usr_requester',
       createdByName: currentUser?.name || 'Nguyễn Minh Anh',
       createdByEmail: currentUser?.email || 'minhanh.nguyen@procure.vn',
@@ -473,14 +446,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPurchaseRequests((prev) => [newPr, ...prev]);
 
     if (!isDraft) {
-      addNotification(
-        'usr_dept_head',
-        'Đề nghị mua sắm mới cần xác nhận',
-        `${currentUser?.name} vừa gửi hồ sơ ${newPrId} (${totalAmount.toLocaleString('vi-VN')} ₫) cần bạn duyệt.`,
-        'TASK_TURN',
-        newPrId,
-        'HIGH'
-      );
+      const assignedReviewer = users.find(u => primaryRole(u) === firstStep?.assignedRole &&
+        u.branchId === currentUser.branchId && u.id !== currentUser.id &&
+        (firstStep?.assignedRole !== 'dept_head' || u.departmentId === currentUser.departmentId));
+      if (assignedReviewer) {
+        addNotification(assignedReviewer.id, 'Đề nghị mua sắm mới cần xử lý',
+          `${currentUser.name} vừa gửi hồ sơ ${newPrId} (${totalAmount.toLocaleString('vi-VN')} ₫) đến bước ${firstStep?.stepName}.`,
+          'TASK_TURN', newPrId, 'HIGH');
+      } else {
+        addToast('Chưa có người duyệt phù hợp trong khu vực. Cần phân công người duyệt trước khi xử lý hồ sơ.', 'warning');
+      }
 
       // Cảnh báo ngân sách sơ bộ nếu thiếu nguồn ngay khi nộp (nhưng KHÔNG giữ tiền ngay khi nộp - đúng TO-BE 01)
       if (available < totalAmount) {
@@ -505,45 +480,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newPrId;
   };
 
-  const updateDraftPR = (prId: string, data: Partial<PurchaseRequest>, items: PRItem[], submitNow = false) => {
+  const updateDraftPR = (prId: string, data: Partial<PurchaseRequest>, items: PRItem[], submitNow = false): boolean => {
     const pr = purchaseRequests.find(p => p.id === prId);
     if (!pr || !canAccessScreen(currentUser,'PR_EDIT') || pr.createdById !== currentUser?.id || pr.status !== 'DRAFT') {
       addToast('Chỉ người tạo mới được sửa hồ sơ đang ở trạng thái Nháp.', 'error'); return false;
     }
     const totalAmount = items.reduce((sum, it) => sum + it.totalPrice, 0);
+    if (submitNow && (!isValidPRItems(items) || !(data.title ?? pr.title).trim() ||
+        !(data.purpose ?? pr.purpose).trim() || !(data.budgetId ?? pr.budgetId))) {
+      addToast('Hồ sơ chưa hợp lệ để gửi phê duyệt.', 'error'); return false;
+    }
+    if (data.budgetId && !budgetPools.some(b => b.id === data.budgetId && b.branchId === currentUser?.branchId && b.departmentId === currentUser?.departmentId)) {
+      addToast('Nguồn ngân sách không hợp lệ.', 'error'); return false;
+    }
+    const steps = submitNow ? buildApprovalTimeline(currentUser!, totalAmount, users) : pr.approvalTimeline;
     setPurchaseRequests(prev => prev.map(p => p.id !== prId ? p : {
-      ...p, title: data.title ?? p.title, purpose: data.purpose ?? p.purpose,
-      needByDate: data.needByDate ?? p.needByDate,
-      attachments: data.attachments ?? p.attachments, items, totalAmount,
-      versions: p.versions.map(v => v.versionNumber === p.currentVersion ?
-        { ...v, items, totalAmount, subtotal: items.reduce((a,i) => a+i.quantity*i.unitPrice,0), totalTax: totalAmount-items.reduce((a,i)=>a+i.quantity*i.unitPrice,0) } : v),
-      updatedAt: new Date().toLocaleString('vi-VN'),
+      ...p, title:data.title ?? p.title, purpose:data.purpose ?? p.purpose,
+      needByDate:data.needByDate ?? p.needByDate, budgetId:data.budgetId ?? p.budgetId,
+      budgetName:budgetPools.find(b => b.id === (data.budgetId ?? p.budgetId))?.name ?? p.budgetName,
+      attachments:data.attachments ?? p.attachments, items, totalAmount,
+      status: submitNow ? statusForApprovalStep(steps) : 'DRAFT',
+      approvalTimeline:steps, currentStepIndex:0,
+      currentAssigneeRole:steps[0]?.assignedRole ?? p.currentAssigneeRole,
+      currentAssigneeName:steps[0]?.assignedToName ?? p.currentAssigneeName,
+      versions:p.versions.map(v => v.versionNumber === p.currentVersion ?
+        {...v, items, totalAmount, subtotal:items.reduce((a,i) => a+i.quantity*i.unitPrice,0),
+          totalTax:totalAmount-items.reduce((a,i) => a+i.quantity*i.unitPrice,0)} : v),
+      updatedAt:new Date().toLocaleString('vi-VN'),
     }));
-    addToast(submitNow ? `Đã gửi ${prId} đi phê duyệt.` : `Đã lưu bản nháp ${prId}`, 'success'); return true;
+    if (submitNow) addAuditLog('SUBMIT_DRAFT_PR','PURCHASE_REQUEST',prId,'Gửi bản nháp theo vai trò người lập');
+    addToast(submitNow ? `Đã gửi ${prId} đến bước ${steps[0]?.stepName}.` : `Đã lưu bản nháp ${prId}.`, 'success');
+    return true;
   };
 
   const submitDraftPR = (prId: string): boolean => {
     const pr = purchaseRequests.find(p => p.id === prId);
-    if (!pr || !canAccessScreen(currentUser,'PR_EDIT') || pr.status !== 'DRAFT' || pr.createdById !== currentUser?.id || !isValidPRItems(pr.items) ||
-        !pr.title.trim() || !pr.purpose.trim() || !pr.budgetId) {
-      addToast('Hồ sơ nháp thiếu thông tin hoặc bạn không có quyền gửi.', 'error'); return false;
-    }
-    const finalRole: User['roles'][0] = pr.totalAmount >= 50_000_000 ? 'bod' : pr.totalAmount >= 10_000_000 ? 'branch_director' : 'dept_head';
-    const finalName = finalRole === 'bod' ? 'Vũ Đình Trọng' : finalRole === 'branch_director' ? 'Lê Thị Cúc' : 'Trần Văn Bình';
-    setPurchaseRequests(prev => prev.map(p => p.id !== prId ? p : ({
-      ...p, status: 'PENDING_DEPT', currentStepIndex: 0, currentAssigneeRole: 'dept_head',
-      currentAssigneeName: 'Trần Văn Bình', updatedAt: new Date().toLocaleString('vi-VN'),
-      approvalTimeline: p.approvalTimeline.map((step, index) => index === 2 ?
-        {...step, assignedRole: finalRole, assignedToName: finalName} : {...step, status: 'PENDING'}),
-    })));
-    addAuditLog('SUBMIT_DRAFT_PR','PURCHASE_REQUEST',prId,'Gửi bản nháp đi phê duyệt');
-    addToast(`Đã gửi ${prId} đi phê duyệt.`, 'success'); return true;
+    if (!pr) return false;
+    return updateDraftPR(prId, {}, pr.items, true);
   };
 
   // TO-BE 01 / TO-BE 02: Phiên bản sửa sau duyệt hoặc sau yêu cầu bổ sung
   const createPRRevision = (prId: string, newItems: PRItem[], changeSummary: string) => {
     const pr = purchaseRequests.find((p) => p.id === prId);
-    if (!pr || !isRequesterRole(currentUser) || !canAccessScreen(currentUser,'PR_DETAIL') || pr.createdById !== currentUser?.id ||
+    if (!pr || !canAccessScreen(currentUser,'PR_CREATE') || !canAccessScreen(currentUser,'PR_DETAIL') || pr.createdById !== currentUser?.id ||
         !['APPROVED', 'REVISION_REQUESTED'].includes(pr.status) ||
         pr.execution?.actualOrderedAmount) return false;
     if (!changeSummary.trim() || !isValidPRItems(newItems)) return false;
@@ -573,16 +552,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           versions: [...p.versions, newVersion],
           items: newItems,
           totalAmount: newTotal,
-          status: 'PENDING_DEPT', // Trình duyệt lại
+          status: statusForApprovalStep(buildApprovalTimeline(currentUser!, newTotal, users)),
           currentStepIndex: 0,
-          currentAssigneeRole: 'dept_head',
-          approvalTimeline: p.approvalTimeline.map((step, idx) => ({
-            ...step,
-            status: 'PENDING',
-            decidedAt: undefined,
-            decidedByName: undefined,
-            comments: idx === 0 ? `Phiên bản v${nextVer} gửi duyệt lại: ${changeSummary}` : undefined,
-          })),
+          currentAssigneeRole: buildApprovalTimeline(currentUser!, newTotal, users)[0].assignedRole,
+          currentAssigneeName: buildApprovalTimeline(currentUser!, newTotal, users)[0].assignedToName,
+          approvalTimeline: buildApprovalTimeline(currentUser!, newTotal, users),
           updatedAt: new Date().toLocaleString('vi-VN'),
         };
       })
@@ -600,7 +574,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const requestPRCancel = (prId: string, reason: string) => {
     const pr = purchaseRequests.find((p) => p.id === prId);
-    if (!pr || !isRequesterRole(currentUser) || pr.createdById !== currentUser?.id || !reason.trim() ||
+    if (!pr || !canAccessScreen(currentUser,'PR_CREATE') || pr.createdById !== currentUser?.id || !reason.trim() ||
         !['DRAFT','REVISION_REQUESTED','WAITING_FUNDS'].includes(pr.status)) return false;
     if (pr.execution?.actualOrderedAmount || pr.execution?.actualRecordedAmount ||
         pr.versions.some(v => v.isEffective && pr.status !== 'APPROVED') ||
@@ -891,7 +865,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           comments: comments || 'Đã xác nhận.',
         };
 
-        const nextStatus = nextStepIndex === 1 ? 'PENDING_FINANCE' : 'PENDING_FINAL';
+        const nextStatus = statusForApprovalStep(pr.approvalTimeline, nextStepIndex);
 
         return {
           ...p,

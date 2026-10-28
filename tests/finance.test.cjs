@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const {
   availableBudget, reserveBudget, commitBudget, recognizeExpense, releaseHold,
   transferBudget, canApproveStep, canSeeBranch, heldForRequest, isValidPRItems,
-  canViewAllRegions, canViewDashboard, canReadRequest, canAccessScreen, defaultScreenFor, isRequesterRole, primaryRole,canManageBudget,canExecutePurchase,canReconcile,canManageUsers,canReadBudget,
+  canViewAllRegions, canViewDashboard, canReadRequest, canAccessScreen, defaultScreenFor, isRequesterRole, primaryRole,canManageBudget,canExecutePurchase,canReconcile,canManageUsers,canReadBudget,buildApprovalTimeline,statusForApprovalStep,
 } = require('../.test-build/domain/rules.js');
 const pool=(id,allocated)=>({id,allocated,adjustments:0,held:0,committed:0,used:0,branchId:'HQ'});
 test('A: 100M, reserve 70M -> 50M rejected (no negative)',()=>{
@@ -166,11 +166,11 @@ const allScreens = ['DASHBOARD','PR_LIST','PR_CREATE','PR_EDIT','PR_DETAIL','APP
 const expected = {
  requester:['PR_LIST','PR_CREATE','PR_EDIT','PR_DETAIL'],
  dept_head:['PR_LIST','PR_DETAIL','APPROVAL_QUEUE','NOTIFICATIONS'],
- finance:['DASHBOARD','PR_LIST','PR_DETAIL','APPROVAL_QUEUE','BUDGET_OVERVIEW','BUDGET_TRANSFERS','BUDGET_WAITING_PR','REPORTS','NOTIFICATIONS'],
+ finance:['DASHBOARD','PR_LIST','PR_CREATE','PR_EDIT','PR_DETAIL','APPROVAL_QUEUE','BUDGET_OVERVIEW','BUDGET_TRANSFERS','BUDGET_WAITING_PR','REPORTS','NOTIFICATIONS'],
  procurement:['DASHBOARD','PR_LIST','PR_DETAIL','EXECUTION_LIST','REPORTS','NOTIFICATIONS'],
  accountant:['DASHBOARD','PR_LIST','PR_DETAIL','RECONCILIATION_IMPORT','REPORTS','NOTIFICATIONS'],
- branch_director:['DASHBOARD','PR_LIST','PR_DETAIL','APPROVAL_QUEUE','REPORTS','NOTIFICATIONS'],
- bod:['DASHBOARD','PR_LIST','PR_DETAIL','APPROVAL_QUEUE','BUDGET_OVERVIEW','BUDGET_TRANSFERS','BUDGET_WAITING_PR','REPORTS','NOTIFICATIONS'],
+ branch_director:['DASHBOARD','PR_LIST','PR_CREATE','PR_EDIT','PR_DETAIL','APPROVAL_QUEUE','REPORTS','NOTIFICATIONS'],
+ bod:['DASHBOARD','PR_LIST','PR_CREATE','PR_EDIT','PR_DETAIL','APPROVAL_QUEUE','BUDGET_OVERVIEW','BUDGET_TRANSFERS','BUDGET_WAITING_PR','REPORTS','NOTIFICATIONS'],
  admin:['ADMIN_MANAGEMENT'],
 };
 for (const [role,screens] of Object.entries(expected)) {
@@ -232,4 +232,67 @@ test('V7: draft requests remain private even for manager, director and BOD',()=>
  assert.equal(canReadRequest(staff('requester'),draft),true);
  for(const role of ['dept_head','finance','branch_director','bod','procurement','accountant','admin'])
    assert.equal(canReadRequest(staff(role),draft),false,role);
+});
+
+const routeCreator=(role,id='creator',branch='HQ',dept='D')=>({id,name:id,isActive:true,roles:[role],branchId:branch,departmentId:dept});
+const routeUsers=[
+  routeCreator('dept_head','manager'),
+  routeCreator('finance','finance1'), routeCreator('finance','finance2'),
+  routeCreator('branch_director','director'),
+  routeCreator('bod','bod1'),routeCreator('bod','bod2'),
+];
+test('V9: requester first routes to department head then finance and threshold approver',()=>{
+  for (const amount of [5_000_000,15_000_000,55_000_000]) {
+    const steps=buildApprovalTimeline(routeCreator('requester'), amount, routeUsers);
+    assert.equal(steps[0].assignedRole,'dept_head');
+    assert.equal(statusForApprovalStep(steps),'PENDING_DEPT');
+    assert.equal(steps[1].assignedRole,'finance');
+    assert.equal(statusForApprovalStep(steps,1),'PENDING_FINANCE');
+    assert.equal(steps[2].assignedRole,amount>=50_000_000?'bod':amount>=10_000_000?'branch_director':'dept_head');
+    assert.equal(statusForApprovalStep(steps,2),'PENDING_FINAL');
+  }
+});
+test('V9: finance-created request bypasses department head, routes to another finance',()=>{
+  const creator=routeCreator('finance','finance1');
+  const steps=buildApprovalTimeline(creator,5_000_000,routeUsers);
+  assert.deepEqual(steps.map(s=>s.assignedRole),['finance']);
+  assert.equal(statusForApprovalStep(steps),'PENDING_FINANCE');
+  assert.equal(steps[0].assignedToName,'finance2');
+  const req={createdById:creator.id,status:'PENDING_FINANCE',branchId:'HQ',departmentId:'D',currentStepIndex:0,approvalTimeline:steps};
+  assert.equal(canApproveStep(creator,req,[]),false);
+  assert.equal(canApproveStep(routeCreator('finance','finance2'),req,[]),true);
+});
+test('V9: finance-created 10M+ request still needs final management approval',()=>{
+  const creator=routeCreator('finance','finance1');
+  assert.deepEqual(buildApprovalTimeline(creator,15_000_000,routeUsers).map(x=>x.assignedRole),['finance','branch_director']);
+  assert.deepEqual(buildApprovalTimeline(creator,50_000_000,routeUsers).map(x=>x.assignedRole),['finance','bod']);
+});
+test('V9: finance and higher can create, lower non-requester functional roles remain restricted',()=>{
+  for(const role of ['branch_director','bod']){
+    assert.equal(canAccessScreen(routeCreator(role),'PR_CREATE'),true);
+    const steps=buildApprovalTimeline(routeCreator(role),5_000_000,routeUsers);
+    assert.deepEqual(steps.map(x=>x.assignedRole),['finance'],role);
+  }
+  for(const role of ['dept_head','procurement','accountant','admin']){
+    assert.equal(canAccessScreen(routeCreator(role),'PR_CREATE'),false,role);
+    assert.throws(()=>buildApprovalTimeline(routeCreator(role),5_000_000,routeUsers));
+  }
+});
+test('V9: branch director cannot final-approve own mid-tier request',()=>{
+  const creator=routeCreator('branch_director','director');
+  const steps=buildApprovalTimeline(creator,20_000_000,routeUsers);
+  assert.deepEqual(steps.map(x=>x.assignedRole),['finance','bod']);
+});
+test('V9: finance/director/BOD can see own pending request, not other peoples private draft',()=>{
+  for(const role of ['finance','branch_director','bod']){
+    const creator=routeCreator(role,'creator');
+    assert.equal(canReadRequest(creator,{...exampleRequest,branchId:'HQ',createdById:'creator',status:'PENDING_FINANCE'}),true);
+    assert.equal(canReadRequest(creator,{...exampleRequest,branchId:'HQ',createdById:'someone-else',status:'DRAFT',versions:[]}),false);
+  }
+});
+
+test('V9: missing director in assigned branch escalates mid-tier approval to BOD',()=>{
+ const staffHq=[routeCreator('finance','fin','HQ'),routeCreator('finance','fin2','HQ'),routeCreator('bod','bod','HQ')];
+ const plan=buildApprovalTimeline(routeCreator('finance','fin','HQ'),25_000_000,staffHq);
+ assert.deepEqual(plan.map(x=>x.assignedRole),['finance','bod']);
 });

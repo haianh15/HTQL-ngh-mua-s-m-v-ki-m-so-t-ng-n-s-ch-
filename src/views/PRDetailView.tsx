@@ -79,7 +79,7 @@ export const PRDetailView: React.FC = () => {
   const isCreatorSelfApprover =
     isPendingApproval && currentUser?.id === pr.createdById;
 
-  const isCreator = isRequesterRole(currentUser) && currentUser?.id === pr.createdById;
+  const isCreator = canAccessScreen(currentUser, 'PR_CREATE') && currentUser?.id === pr.createdById;
   const canEditOrCancel =
     isCreator && ['DRAFT', 'REVISION_REQUESTED', 'WAITING_FUNDS'].includes(pr.status);
 
@@ -89,8 +89,11 @@ export const PRDetailView: React.FC = () => {
     setTimeout(() => {
       setIsAtomicHolding(false);
       const res = processApprovalDecision(pr.id, pr.currentStepIndex, 'APPROVED');
-      if (!res.success) {
-        // Thông báo lỗi nếu thất bại (ví dụ Chờ nguồn)
+      if (res.success) {
+        // Sau khi hoàn tất bước duyệt, về hàng chờ của vai trò hiện tại.
+        navigateTo('APPROVAL_QUEUE');
+      } else if (res.error) {
+        addToast(res.error, 'error');
       }
     }, 450);
   };
@@ -100,7 +103,9 @@ export const PRDetailView: React.FC = () => {
       addToast('Bắt buộc phải nhập lý do từ chối hồ sơ.', 'error');
       return;
     }
-    processApprovalDecision(pr.id, pr.currentStepIndex, 'REJECTED', rejectReason);
+    const res = processApprovalDecision(pr.id, pr.currentStepIndex, 'REJECTED', rejectReason);
+    if (res.success) navigateTo('APPROVAL_QUEUE');
+    else if (res.error) addToast(res.error, 'error');
     setIsRejectDialogOpen(false);
     setRejectReason('');
   };
@@ -110,12 +115,14 @@ export const PRDetailView: React.FC = () => {
       addToast('Bắt buộc phải nêu rõ nội dung cần bổ sung.', 'error');
       return;
     }
-    processApprovalDecision(
+    const res = processApprovalDecision(
       pr.id,
       pr.currentStepIndex,
       'REVISION_REQUESTED',
       requestRevisionComments
     );
+    if (res.success) navigateTo('APPROVAL_QUEUE');
+    else if (res.error) addToast(res.error, 'error');
     setIsRequestRevisionOpen(false);
     setRequestRevisionComments('');
   };

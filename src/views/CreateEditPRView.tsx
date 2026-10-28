@@ -4,7 +4,7 @@
  * Procure UI — Create/Edit Purchase Request View (UI-02, UC-MS01, UC-MS02, UC-MS03)
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { isRequesterRole } from '../domain/rules';
 import { useApp } from '../context/AppContext';
 import { PRItem, PRAttachment } from '../types';
@@ -52,6 +52,16 @@ export const CreateEditPRView: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Không mở PR_DETAIL ngay sau setPurchaseRequests: React chưa kịp công bố hồ sơ mới.
+  // Chỉ điều hướng khi hồ sơ đã có trong state và người dùng có quyền đọc.
+  const [pendingDetailId, setPendingDetailId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pendingDetailId || !purchaseRequests.some((pr) =>
+      pr.id === pendingDetailId && pr.createdById === currentUser?.id
+    )) return;
+    setPendingDetailId(null);
+    navigateTo('PR_DETAIL', pendingDetailId);
+  }, [pendingDetailId, purchaseRequests, currentUser?.id, navigateTo]);
 
   // Tính toán ngân sách nguồn được chọn
   const selectedBudget = useMemo(() => {
@@ -179,7 +189,7 @@ export const CreateEditPRView: React.FC = () => {
       if (editingPR) {
         const submitted = updateDraftPR(editingPR.id, { title, purpose, needByDate, budgetId: selectedBudgetId, attachments }, items, !isDraft);
         setIsSubmitting(false);
-        if (submitted) navigateTo('PR_DETAIL', editingPR.id);
+        if (submitted) setPendingDetailId(editingPR.id);
         return;
       }
       const newPrId = createPurchaseRequest(
@@ -195,7 +205,7 @@ export const CreateEditPRView: React.FC = () => {
       );
 
       setIsSubmitting(false);
-      if (newPrId) navigateTo('PR_DETAIL', newPrId);
+      if (newPrId) setPendingDetailId(newPrId);
     }, 500);
   };
 
