@@ -1,0 +1,6 @@
+{
+  "name": "Procure UI – Quản lý đề nghị mua sắm & ngân sách",
+  "description": "Hệ thống quản lý đề nghị mua sắm và kiểm soát ngân sách nội bộ cho doanh nghiệp phân phối và kỹ thuật với 1 trụ sở và 5 chi nhánh.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

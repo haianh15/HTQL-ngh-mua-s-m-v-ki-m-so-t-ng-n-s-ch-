@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+:root {
+  --primary: #5540C7;
+  --primary-hover: #4430AA;
+  --primary-soft: #F0EDFF;
+  --canvas: #F7F8FC;
+  --surface: #FFFFFF;
+  --text: #202039;
+  --muted: #62657A;
+  --border: #DDE0EA;
+  --success: #176B49;
+  --success-soft: #E8F6EE;
+  --warning: #875000;
+  --warning-soft: #FFF3D6;
+  --danger: #B42336;
+  --danger-soft: #FDECEF;
+  --info: #2459AB;
+  --info-soft: #EBF2FF;
+  --focus: #2459AB;
+  --radius: 10px;
+  --shadow: 0 4px 20px rgba(32, 32, 57, 0.05);
+  --font: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  background-color: var(--canvas);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

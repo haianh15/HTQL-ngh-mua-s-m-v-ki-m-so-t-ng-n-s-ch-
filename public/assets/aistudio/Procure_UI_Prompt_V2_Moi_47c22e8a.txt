@@ -1,0 +1,199 @@
+# MASTER PROMPT — THIẾT KẾ HỆ THỐNG QUẢN LÝ ĐỀ NGHỊ MUA SẮM VÀ KIỂM SOÁT NGÂN SÁCH
+
+## 1. Vai trò, nhiệm vụ và tài liệu nguồn
+
+Bạn là **Senior Product Designer / UI-UX Designer, Business Analyst và Front-end Engineer** có kinh nghiệm xây dựng enterprise SaaS cho doanh nghiệp nhiều chi nhánh.
+
+Hãy **thiết kế đầy đủ, đồng bộ và có thể sử dụng để kiểm tra các luồng nghiệp vụ** cho ứng dụng web tiếng Việt tên tạm thời **Procure UI — Quản lý đề nghị mua sắm và kiểm soát ngân sách nội bộ**, phục vụ doanh nghiệp phân phối và cung cấp dịch vụ kỹ thuật có **01 trụ sở, 05 chi nhánh, khoảng 600 nhân viên, 200–300 đề nghị mua sắm/tháng**.
+
+**Tài liệu đính kèm bắt buộc đọc trước khi thực hiện:**
+1. `Procure-UI-Design-System.zip`, đặc biệt `tokens.json`, `procure-ui.css`, `design-system.html`, `README.md`.
+2. `design-system.html` — các ví dụ trực quan về màu sắc, component, form, table, trang chi tiết phê duyệt và ngân sách.
+3. Tài liệu **BRD** phiên bản mới nhất: phạm vi, mục tiêu, quy tắc BR01–BR12 và TO-BE 01/02/03.
+4. Tài liệu **SRS** phiên bản mới nhất: 34 UC, 10 nhóm màn hình UI-01…UI-10, trạng thái, điều kiện, luồng chính/thay thế/ngoại lệ, quyền, dữ liệu và kịch bản nghiệm thu.
+
+**Thứ tự ưu tiên khi có xung đột:** BRD/SRS đã xác nhận quyết định *nghiệp vụ*; Design System quyết định *giao diện*; các màn hình demo trong Design System chỉ là ví dụ, **không** được sử dụng để thay đổi quy tắc nghiệp vụ. Nếu hai tài liệu nghiệp vụ mâu thuẫn hoặc chưa chốt, đánh dấu **Cần xác nhận** và đưa ra phương án thiết kế an toàn, không tự coi phương án đề xuất là quyết định đã phê duyệt.
+
+**Kết quả mong muốn:** một hệ thống giao diện thống nhất, có cấu trúc điều hướng, tất cả các trang/chức năng trong phạm vi và các trạng thái tương tác. Nếu nền tảng AI cho phép viết code, hãy triển khai **prototype web responsive có tương tác thật** với dữ liệu mẫu nhất quán và cơ chế lưu phù hợp; không xuất ra ảnh tĩnh để thay thế ứng dụng. Nếu chỉ hỗ trợ Figma/thiết kế, hãy tạo đầy đủ màn hình và prototype liên kết, kể cả luồng lỗi, nhưng không giả vờ có backend thật.
+
+## 2. Quy tắc tuân thủ Design System tuyệt đối
+
+**Nền tảng:** light theme, giao diện tiếng Việt, tiền tệ VND, ngày `dd/MM/yyyy`, số tiền không có phần lẻ, số lớn có phân nhóm hàng nghìn; hiển thị `₫` nhất quán.
+
+**Color tokens — không tự đổi:**
+- `primary #5540C7`; `primary-hover #4430AA`; `primary-soft #F0EDFF`.
+- `canvas #F7F8FC`; `surface #FFFFFF`; `text #202039`; `muted #62657A`; `border #DDE0EA`.
+- `success #176B49`, `success-soft #E8F6EE`.
+- `warning #875000`, `warning-soft #FFF3D6`.
+- `danger #B42336`, `danger-soft #FDECEF`.
+- `info #2459AB`, `info-soft #EBF2FF`; `focus #2459AB`.
+
+**Typography:** Inter nếu có sẵn và hợp lệ, fallback system-ui; cỡ 12/14/16/20/24/32 px; body 14 px, line-height 1.5; font-weight 400/500/600/700; số tiền dùng `tabular-nums`, căn phải trong bảng. Không tự thêm font lạ.
+
+**Layout:** desktop sidebar **232 px**, app header mục tiêu **72 px**, content tối đa **1280 px**, padding desktop **32 px**, grid 12 cột/gutter 24 px. Mobile `≤768 px`: menu thu gọn, form một cột, bảng cuộn ngang có nhãn, drawer full-width. Dùng hệ spacing **4, 8, 12, 16, 20, 24, 32, 40, 48, 64 px**. Radius badge 6 px, input/button 10 px, hero/dialog 16 px. Card trắng, viền mảnh, bóng nhẹ đúng Design System; tuyệt đối tránh gradient màu mè, glassmorphism hoặc dashboard tối.
+
+**Component bắt buộc dùng lại:** AuthLayout/LoginForm/PasswordField/OTPInput/AccountMenu/SessionExpiredDialog/ForbiddenPage; AppShell/Sidebar/Header/Breadcrumb; Button (primary/secondary/ghost/danger); Input/Select/DatePicker/Textarea/FileUpload; StatusBadge; Alert/Toast; DataTable; Search/Filter; Pagination; BudgetCard; BudgetImpactPanel; BudgetDistributionBar; ApprovalTimeline; ConfirmDialog; Drawer; Tabs; Stepper; Empty/Loading/Error/Skeleton; AuditHistory; AttachmentPreview. Không viết mỗi trang bằng style khác nhau.
+
+**Quy tắc tương tác:** button thường cao 40 px; input cao tối thiểu 44 px; mục tiêu chạm mobile ≥44 px; label luôn hiển thị; required rõ ràng; lỗi bên dưới field kèm văn bản; disabled/loading rõ; ngăn bấm gửi hai lần; giữ dữ liệu đã nhập nếu lỗi. Toast cho phản hồi ngắn, inline alert cho quyết định liên quan tiền, dialog xác nhận khi từ chối/hủy/giải phóng. Không dùng màu làm tín hiệu duy nhất. Keyboard và focus-visible, đóng dialog bằng Escape, focus trở lại đúng nơi; test 360 px, zoom 200%, reduced-motion và contrast WCAG AA.
+
+**Bám sát ví dụ chính thức trong file HTML:** khi duyệt hồ sơ, đặt **chi tiết đề nghị + timeline** cạnh **tác động ngân sách và hành động duyệt**; khi xem ngân sách luôn tách rõ **được cấp / đang giữ / đã cam kết / đã sử dụng / khả dụng**. Giao diện demo chỉ mang tính minh họa; không sao chép nội dung mẫu làm dữ liệu nghiệp vụ cố định.
+
+## 3. Actors, quyền và điều hướng
+
+Các vai trò: **Nhân viên đề nghị; Trưởng phòng/Quản lý đơn vị; Người phê duyệt theo hạn mức; Tài chính; Mua hàng; Kế toán; Ban Giám đốc; Quản trị hệ thống**. Một người có thể có nhiều vai trò; luôn kiểm tra phạm vi theo **trụ sở/chi nhánh/phòng ban/dự án**, không phải chỉ ẩn nút ở frontend. Người tạo **không được tự duyệt** đề nghị của mình.
+
+Tạo sidebar theo quyền, với các nhóm điều hướng sau (có thể hiển thị/ẩn nhóm khi không có quyền):
+
+1. **Tổng quan** → dashboard công việc và ngân sách theo phạm vi.
+2. **Đề nghị mua sắm** → Danh sách đề nghị → Tạo đề nghị → Chi tiết đề nghị → Phiên bản/Lịch sử → Đề nghị sửa/hủy.
+3. **Phê duyệt** → Hàng chờ xử lý → Chi tiết duyệt → Quyết định duyệt / Từ chối / Trả bổ sung → Ủy quyền → Quá hạn.
+4. **Ngân sách** → Tổng quan nguồn → Chi tiết nguồn → Phân bổ năm → Đề nghị điều chỉnh/chuyển nguồn → Nhật ký biến động → Hồ sơ chờ nguồn.
+5. **Thực hiện mua sắm** → Danh sách hồ sơ đã duyệt → Tiếp nhận → Cập nhật giá trị đã đặt/thực hiện/hủy.
+6. **Đối soát & nhập liệu** → Nhập file kế toán/kho → Xem trước → Kiểm tra lỗi → Xác nhận nhập → Chênh lệch cần xử lý.
+7. **Báo cáo** → Báo cáo đề nghị, quá hạn, ngân sách, cam kết/sử dụng, chênh lệch; xuất Excel/PDF.
+8. **Thông báo** → Việc đến lượt, thiếu thông tin, gần/quá hạn, chờ nguồn, kết quả duyệt.
+9. **Quản trị** → Tài khoản, vai trò/phạm vi dữ liệu, cơ cấu tổ chức/dự án, hạn mức/tuyến duyệt, ủy quyền, cấu hình thông báo, nhật ký kiểm toán.
+
+Yêu cầu breadcrumb, active navigation, liên kết giữa các màn hình, filter/pagination, quay lại không mất bộ lọc; từ dashboard có thể nhảy tới danh sách đã được lọc sẵn. Trang chi tiết phải có deep link, không mất ngữ cảnh khi chuyển tab.
+
+## 3A. Xác thực, đăng xuất và bảo vệ phiên — BỔ SUNG CẦN ĐỒNG BỘ SRS
+
+**Đây là hạng mục bổ sung để hoàn chỉnh trải nghiệm**, vì bản danh sách 34 UC trong SRS hiện tập trung vào 5 nhóm nghiệp vụ và **chưa mô tả đầy đủ UC đăng nhập/đăng xuất**. Không tuyên bố đây là UC đã được khách hàng phê duyệt. Khi cập nhật SRS, bổ sung nhóm `UC-XT` (xác thực) hoặc mã theo quy ước của dự án; ghi rõ phạm vi trước khi triển khai.
+
+### 3A.1. Các màn hình và thành phần bắt buộc
+
+1. **Đăng nhập (`AUTH-01`)**: Giao diện riêng trước khi vào AppShell; tên hệ thống, logo chữ theo Design System, trường tài khoản/email công việc, mật khẩu có nút ẩn/hiện, checkbox nhớ tài khoản *nếu chính sách cho phép*, CTA Đăng nhập, liên kết Quên mật khẩu, thông báo lỗi cụ thể không tiết lộ tài khoản có tồn tại hay không.
+2. **Xác thực bổ sung (`AUTH-02`)**: Màn nhập OTP/MFA cho người duyệt, Tài chính và quản trị; trạng thái hết hạn mã, nhập sai, gửi lại theo giới hạn được cấu hình; quay lại bước đăng nhập an toàn. Nếu backend chưa có MFA, trình bày rõ là prototype, không giả vờ đã xác thực thực.
+3. **Quên/đặt lại mật khẩu (`AUTH-03`)**: Nhập email công việc → yêu cầu liên kết/mã khôi phục → màn tạo mật khẩu mới → thông báo thành công và điều hướng về đăng nhập. Link khôi phục chỉ gửi khi có dịch vụ xác thực thật; prototype mô phỏng giao diện/luồng và gắn nhãn minh họa, không gửi email giả.
+4. **Đổi mật khẩu (`AUTH-04`)**: Tại menu tài khoản, nhập mật khẩu hiện tại, mật khẩu mới và xác nhận; validate, báo lỗi, báo thành công, xử lý phiên cũ theo chính sách doanh nghiệp.
+5. **Đăng xuất (`AUTH-05`)**: Menu avatar/tên người dùng ở header có `Thông tin tài khoản`, `Đổi mật khẩu`, `Đăng xuất`; đăng xuất phải vô hiệu phiên/thu hồi token phù hợp, xóa thông tin xác thực ở client và quay về màn đăng nhập; nút Back không được mở lại trang nhạy cảm từ cache.
+6. **Hết phiên/không có quyền (`AUTH-06`)**: Khi phiên hết hạn, hiển thị thông báo và điều hướng an toàn về đăng nhập; sau đăng nhập có thể quay về trang đã yêu cầu nếu được phép. Nếu không đủ quyền, dùng trang `403 – Bạn không có quyền truy cập`, có nút về trang hợp lệ; không hiển thị dữ liệu nội bộ trước khi kiểm tra quyền.
+7. **Quản trị tài khoản (`AUTH-07`)**: Quản trị tạo/kích hoạt/vô hiệu tài khoản, gán nhiều vai trò và phạm vi trụ sở/chi nhánh/phòng ban/dự án; lịch sử thay đổi và xác thực quyền ở server. Tránh tự tạo chức năng nhân sự ngoài phạm vi.
+
+### 3A.2. Luồng và điều kiện xử lý
+
+- Người chưa đăng nhập truy cập deep link trong hệ thống → đưa tới trang đăng nhập → sau xác thực, MFA (nếu áp dụng) → kiểm tra vai trò/phạm vi → dashboard hợp lệ hoặc đường dẫn trước đó nếu còn quyền.
+- Đăng nhập sai → giữ nguyên tài khoản nhập, xóa trường mật khẩu, báo lỗi nhất quán; không tiết lộ email có tồn tại hay không. Cơ chế giới hạn lần thử, khóa tạm thời, thời hạn MFA, TTL phiên, đổi mật khẩu và chính sách mật khẩu **cần được IT/PO xác nhận**; không áp dụng ngưỡng tự bịa.
+- Người dùng có nhiều vai trò → giao diện và dữ liệu theo quyền hợp nhất có kiểm soát, không mặc định vai trò cao nhất sẽ cho xem toàn bộ chi nhánh. Mọi yêu cầu đọc/ghi cần kiểm quyền phía máy chủ; ẩn menu ở client chỉ là hỗ trợ UX.
+- Khi bị vô hiệu tài khoản hoặc quyền bị thu hồi, phiên hiện có không được tiếp tục thao tác nhạy cảm. Chuyển trạng thái an toàn và ghi nhật ký sự kiện.
+- Nhật ký bảo mật gồm thời gian, tài khoản, kết quả và loại sự kiện; không lưu mật khẩu, OTP, token hoặc liên kết khôi phục ở dạng lộ bí mật. Chỉ lưu dữ liệu cần thiết và theo quy chế bảo mật.
+- **Prototype:** có thể dùng một nhóm tài khoản mẫu theo vai trò để kiểm thử giao diện, nhưng phải ghi rõ `Dữ liệu minh họa`; không lưu mật khẩu thật vào localStorage, không giả mạo đăng nhập an toàn cấp production. Nếu xây dựng hệ thống thật: bắt buộc xác thực backend, HTTPS, mật khẩu được băm an toàn, phiên có bảo vệ và phân quyền server-side.
+
+### 3A.3. UI và tính nhất quán Design System
+
+- Màn đăng nhập dùng đúng light theme/tokens của Procure UI: `primary #5540C7`, `canvas #F7F8FC`, `surface #FFFFFF`, `text #202039`, border/radius/spacing/font Inter như file gốc. Không thiết kế trang login màu gradient, tối, kiểu glassmorphism hoặc biệt lập visual language.
+- Form có label cố định, icon ẩn/hiện mật khẩu với accessible name, thông báo validation dưới field, nút primary rõ ràng, trạng thái loading/disabled, điều hướng bằng bàn phím và focus visible.
+- Các trạng thái phải có bản desktop và mobile: ban đầu, sai mật khẩu, khóa/giới hạn tạm thời, cần MFA, MFA sai/hết hạn, quên mật khẩu, liên kết hết hạn, chưa đủ quyền, hết phiên, đăng xuất thành công.
+
+## 4. Danh sách màn hình bắt buộc từ SRS
+
+Thiết kế đầy đủ các màn hình nghiệp vụ sau; **ngoài ra bắt buộc có nhóm AUTH-01…AUTH-07 tại mục 3A**. Có thể bổ sung subpage/modal/drawer khi cần, nhưng không bỏ chức năng:
+
+| Mã | Màn hình | Thành phần chính / hành vi |
+|---|---|---|
+| UI-01 | Danh sách đề nghị | Tìm mã/tên; lọc đơn vị, dự án, trạng thái, ngày; phân trang; cột mã, tên, người tạo, tiền, trạng thái, người đang xử lý, ngày; mở chi tiết; nút tạo mới theo quyền |
+| UI-02 | Tạo/sửa đề nghị | Tên, mục đích, ngày cần, đơn vị/dự án chịu phí, nguồn ngân sách, bảng nhiều hạng mục (tên, thông số, số lượng, đơn giá, thuế/phí), tổng tiền; upload; lưu nháp, gửi duyệt; validation; cảnh báo ngân sách sơ bộ |
+| UI-03 | Chi tiết đề nghị | Header trạng thái + phiên bản có hiệu lực; nội dung/bảng hàng; file; timeline duyệt, người và thời gian chờ; phản hồi; so sánh phiên bản; đề nghị sửa/hủy theo điều kiện |
+| UI-04 | Hàng chờ phê duyệt | Tab Chờ tôi/Đã xử lý/Quá hạn/Được ủy quyền; chi tiết, scope, budget impact; Duyệt/Từ chối/Trả bổ sung; chọn lý do; xử lý người vắng mặt; thông báo xung đột nguồn |
+| UI-05 | Tiếp nhận và cập nhật thực hiện | Chỉ nhận bản duyệt hợp lệ; cập nhật số đã đặt, tình trạng thực hiện, giá thay đổi, phần hủy có chứng từ; yêu cầu kiểm tra/duyệt lại khi cần |
+| UI-06 | Ngân sách | Card số cấp/giữ/cam kết/sử dụng/khả dụng; bộ lọc năm/chi nhánh/phòng/dự án; biểu đồ cấu phần không trùng; phân bổ, điều chỉnh, chuyển nguồn, lịch sử bút toán; tra hồ sơ liên quan |
+| UI-07 | Đối soát, báo cáo và dashboard | Chỉ số theo quyền/kỳ; đề nghị chờ, quá hạn, chênh lệch, báo cáo đơn vị/dự án; xem chi tiết và xuất Excel/PDF |
+| UI-08 | Nhập file kế toán/kho | Chọn file, ánh xạ cột (nếu cần), preview, dòng hợp lệ/trùng/sai, kết quả nhập, lịch sử nhập và chống nhập trùng |
+| UI-09 | Quản trị | Người dùng, vai trò, đơn vị/dự án, tuyến/hạn mức duyệt, ủy quyền và cấu hình nhắc/thông báo, audit theo quyền |
+| UI-10 | Trung tâm thông báo | Theo trạng thái đọc/chưa đọc; điều hướng đúng hồ sơ; lý do sự kiện; ưu tiên cảnh báo quá hạn/thiếu ngân sách |
+
+**Mỗi màn hình có:** trạng thái populated, empty, loading, error, forbidden/insufficient permission (khi phù hợp), responsive desktop/mobile và ít nhất một interaction thực tế có kết quả. Dữ liệu demo không được có tên trùng vô lý, mã tham chiếu không nhất quán hoặc tổng tiền sai.
+
+## 5. Luồng nghiệp vụ TO-BE bắt buộc đúng BRD/SRS
+
+### TO-BE 01 — Lập đề nghị, xét duyệt và giữ ngân sách
+1. Nhân viên tạo nháp, nhập đầy đủ trường bắt buộc, bảng hàng, số tiền gồm thuế/phí, nguồn, ngày cần, chứng từ khi bắt buộc.
+2. Khi **Gửi duyệt**, hệ thống kiểm tra đầy đủ dữ liệu; **chỉ cảnh báo sơ bộ** nếu thiếu nguồn, **không giữ tiền ngay khi gửi**.
+3. Trưởng phòng xác nhận nhu cầu. Nếu cần bổ sung: trả hồ sơ và ghi lý do; người tạo sửa cùng mã với **phiên bản mới** rồi gửi lại. Nếu từ chối: lưu lý do và kết thúc tương ứng.
+4. Tài chính kiểm tra nguồn khả dụng, người chịu chi phí, mức đề nghị. Nếu thiếu nguồn: **Chờ nguồn** / đề nghị bổ sung hoặc điều chuyển có phê duyệt; không hoàn tất luồng thường.
+5. Hệ thống xác định cấp duyệt cuối theo **tổng tiền hồ sơ đã bao gồm thuế và phí**: `<10.000.000 ₫`: trưởng đơn vị; `10.000.000–<50.000.000 ₫`: giám đốc chi nhánh hoặc cấp tương ứng trụ sở **cần xác nhận**; `≥50.000.000 ₫`: Ban Giám đốc. Trưởng phòng trùng cấp duyệt cuối có thể gộp lượt nhưng lưu hai mục đích; người lập không tự duyệt.
+6. Người duyệt xem đầy đủ **nội dung phiên bản, tiến trình, ngân sách được cấp/khả dụng và tác động nếu duyệt**. Các action: **Duyệt / Từ chối / Trả bổ sung**, bắt buộc lý do khi từ chối/trả. Mỗi quyết định lưu người, thời điểm, phạm vi, phiên bản.
+7. **Tại thời điểm phê duyệt cuối**, server kiểm tra lại quyền, phiên bản và số khả dụng rồi **giữ ngân sách bằng giao dịch nguyên tử**. Nếu không đủ: không đánh dấu duyệt thành công; hồ sơ vào **Chờ nguồn** hoặc chờ xử lý theo trạng thái SRS.
+8. Nếu giữ thành công: khóa phiên bản có hiệu lực, đánh dấu **Đã duyệt**, bàn giao Mua hàng đúng bản đó. Hủy/sửa sau duyệt chỉ theo quyền, không cập nhật đè bản cũ.
+
+### TO-BE 02 — Thực hiện mua sắm, cam kết, sử dụng, giải phóng
+1. Mua hàng tiếp nhận hồ sơ đã duyệt, đọc bản duyệt có hiệu lực và cập nhật số đã đặt (chỉ thông tin thực hiện tối thiểu, không xây dựng hệ thống PO/nhập kho đầy đủ).
+2. Số tiền **Đang giữ → Đã cam kết** theo thực tế đã đặt, **không trừ khả dụng lần hai**. Nếu đặt thấp hơn số giữ, phần còn lại vẫn phải được xác định nghĩa vụ trước khi giải phóng.
+3. Kế toán/Tài chính cung cấp và nhập file ghi nhận chi phí. Dòng hợp lệ **Đã cam kết → Đã sử dụng**, không trừ thêm; kiểm tra trùng bằng mã chứng từ/nguồn/hồ sơ và quy tắc đối soát.
+4. Giá thực tế tăng, đổi mặt hàng, tăng số lượng hoặc đổi nguồn/đơn vị chịu phí phải **đánh giá thay đổi**, lập phiên bản/luồng duyệt lại theo chính sách; có thể cần giữ thêm nguồn và xác định lại cấp duyệt. Phần chưa được duyệt **không được thực hiện**.
+5. Mua một phần, giảm giá hoặc hủy phần còn lại: Mua hàng xác nhận nghĩa vụ còn tồn; Tài chính xác nhận **chỉ giải phóng phần thực sự không còn nghĩa vụ**, có chứng từ và audit.
+6. Nếu chênh lệch dữ liệu kế toán/mua hàng/ngân sách: hiển thị trạng thái **Cần đối soát**, đối chiếu và ghi lịch sử; không tự sửa dữ liệu nguồn.
+
+### TO-BE 03 — Phân bổ, điều chỉnh và chuyển nguồn ngân sách
+1. Tài chính lập phân bổ đầu năm cho chi nhánh, phòng ban, dự án; Ban Giám đốc xem xét; chỉ khi phê duyệt hợp lệ hệ thống mới ghi nhận nguồn có hiệu lực.
+2. Tài chính lập đề nghị **tăng/giảm/chuyển nguồn**, nêu nguồn đi/đến, số tiền, lý do, ngày hiệu lực và chứng từ; hệ thống kiểm tra số khả dụng nguồn giảm, không được lấy phần đang giữ/đã cam kết.
+3. Trình cấp có thẩm quyền; nếu trả bổ sung thì chỉnh và trình lại; nếu từ chối thì không thay đổi số dư; nếu duyệt thì cập nhật bút toán hai nguồn, lưu audit và hiệu lực.
+4. Cuối năm: nghĩa vụ chưa hoàn tất xử lý theo quyết định riêng; **không tự động chuyển toàn bộ số dư**.
+
+**Vòng đời ngân sách và phép tính:**
+- `Khả dụng = Được cấp (sau điều chỉnh) − Đang giữ − Đã cam kết − Đã sử dụng`.
+- Các nhóm là **không chồng lặp**: tiền chuyển trạng thái rời nhóm cũ và đi vào nhóm mới; **không ghi giảm hai lần**.
+- Hệ thống không được tự tính và chốt số dư tài chính quan trọng hoàn toàn ở client trong ứng dụng thật. Nếu prototype chưa có backend, phải ghi rõ đây là mô phỏng và thể hiện đúng logic.
+
+**Trạng thái đề nghị SRS:** Nháp; Chờ xác nhận; Chờ Tài chính; Chờ duyệt cuối; Trả bổ sung; Chờ nguồn; Đã duyệt; Đang thực hiện; Từ chối; Đã hủy; Hoàn tất. Thiết kế nhãn ngắn, semantic badge và hành động hợp lệ theo từng trạng thái. Trạng thái `Đã tạo đơn mua` xuất hiện trong HTML Design System **chỉ là ví dụ UI**, không tự triển khai phân hệ đơn mua ngoài phạm vi.
+
+## 6. Bao phủ đủ 34 Use Cases (giữ mã truy vết)
+
+**RC1 — Đề nghị mua sắm:** UC-MS01 Lập và gửi đề nghị; UC-MS02 Kiểm tra tính đầy đủ; UC-MS03 Đính kèm tài liệu; UC-MS04 Tra cứu danh sách; UC-MS05 Theo dõi tiến độ; UC-MS06 So sánh phiên bản; UC-MS07 Đề nghị thay đổi/hủy.
+
+**RC2 — Phê duyệt và ủy quyền:** UC-PD01 Chuyển tuyến duyệt; UC-PD02 Xử lý quyết định; UC-PD03 Cấu hình phân cấp; UC-PD04 Ủy quyền; UC-PD05 Nhắc và xử lý quá hạn; UC-PD06 Đánh giá thay đổi sau duyệt; UC-PD07 Xác minh bản có hiệu lực.
+
+**RC3 — Ngân sách:** UC-NS01 Phân bổ năm; UC-NS02 Điều chỉnh/chuyển nguồn; UC-NS03 Tra cứu khả dụng; UC-NS04 Kiểm tra nguồn; UC-NS05 Giữ tiền khi duyệt cuối; UC-NS06 Chuyển giữ/cam kết/sử dụng; UC-NS07 Giải phóng phần hết nghĩa vụ; UC-NS08 Xử lý thiếu nguồn; UC-NS09 Đối chiếu giá trị; UC-NS10 Truy vết bút toán.
+
+**RC4 — Thực hiện/đối soát:** UC-TH01 Tiếp nhận bản duyệt; UC-TH02 Cập nhật giá trị thực hiện; UC-TH03 Nhập tệp kế toán; UC-TH04 Xử lý chênh lệch.
+
+**RC5 — Quản trị/báo cáo:** UC-QT01 Tài khoản và quyền; UC-QT02 Cấu hình luồng/thông báo; UC-QT03 Nhật ký audit; UC-QT04 Dashboard; UC-QT05 Báo cáo; UC-QT06 Truy xuất hồ sơ và lịch sử.
+
+**Nhóm xác thực đề xuất bổ sung SRS (ngoài 34 UC gốc):** UC-XT01 Đăng nhập; UC-XT02 MFA/OTP; UC-XT03 Quên/đặt lại mật khẩu; UC-XT04 Đổi mật khẩu; UC-XT05 Đăng xuất; UC-XT06 Quản lý phiên và truy cập từ chối; UC-XT07 Kích hoạt/vô hiệu hóa tài khoản. Cập nhật mã và đặc tả UC trong SRS trước khi nghiệm thu chính thức; không gộp nhầm vào 34 UC gốc.
+
+Trên mỗi trang/chức năng, ghi mã UC tương ứng trong tài liệu handoff/ghi chú thiết kế để BA, dev, tester truy vết. Không hiển thị mã UC phức tạp cho người dùng cuối trừ khi hữu ích.
+
+## 7. Ví dụ dữ liệu và kịch bản phải chạy thử được
+
+Tạo dữ liệu mẫu nhất quán: trụ sở + 5 chi nhánh, phòng ban/dự án, tài khoản ở các vai trò, nhiều trạng thái hồ sơ, hồ sơ có 2–3 phiên bản, budget ledger, dữ liệu đã đặt và nhập kế toán. Dán nhãn **Dữ liệu minh họa**, không gán chúng là thông tin đã xác nhận của doanh nghiệp.
+
+**Kịch bản A:** Nguồn còn **100.000.000 ₫**; hai đề nghị **70.000.000 ₫** và **50.000.000 ₫** gần đồng thời. Khi A giữ thành công, khả dụng còn **30.000.000 ₫**; B không thể duyệt cuối và giữ 50 triệu, phải vào **Chờ nguồn**. Test xử lý cạnh tranh nếu có backend.
+
+**Kịch bản B:** Hồ sơ mua **05 màn hình** đã được duyệt, người đề nghị muốn sửa thành **07 màn hình**. Mua hàng chỉ thấy bản 05 màn hình là bản có hiệu lực; thay đổi 07 phải tạo phiên bản mới và trình duyệt lại.
+
+**Kịch bản C:** Hồ sơ đã giữ **40 triệu**, ghi đặt **35 triệu**, kế toán ghi nhận **30 triệu**. Chuyển nhóm trạng thái đúng, không trừ hai lần; **05 triệu còn lại trong cam kết** (nếu chưa hết nghĩa vụ), **05 triệu phần giữ chưa đặt** chỉ giải phóng khi có xác nhận hết nghĩa vụ.
+
+**Kịch bản D:** Người duyệt nghỉ phép 05 ngày; hiển thị nhắc/quá hạn, ủy quyền đúng thời hạn, hạn mức, đơn vị; người nhận ủy quyền không thể tự duyệt hồ sơ của chính mình.
+
+**Kịch bản E:** Thiếu trường bắt buộc, báo giá bắt buộc, file không hợp lệ, lỗi tải dữ liệu, trùng dòng nhập kế toán, không có quyền, thiếu ngân sách, đổi giá làm vượt ngưỡng, hủy một phần đã đặt: tất cả có giao diện phản hồi và đường xử lý tiếp theo.
+
+**Kịch bản F:** Chi nhánh A không thể xem hồ sơ/báo giá/ngân sách nhạy cảm của chi nhánh B nếu không được phân quyền. Audit lưu người, thao tác, lý do, thời gian; bản đã phát sinh duyệt không được xóa vĩnh viễn.
+
+**Kịch bản G — xác thực:** (1) Chưa đăng nhập mở URL chi tiết hồ sơ → yêu cầu đăng nhập; (2) Tài khoản đúng, mật khẩu sai → lỗi và không vào được; (3) Người duyệt xác thực đúng mật khẩu nhưng chưa qua MFA → chưa vào chức năng; (4) MFA sai/hết hạn → thông báo đúng và xử lý gửi lại; (5) Đăng xuất → quay về đăng nhập, không xem lại dữ liệu nhạy cảm bằng nút Back; (6) Phiên hết hạn → điều hướng đăng nhập; (7) Nhân viên chi nhánh A đăng nhập không xem được dữ liệu chi nhánh B; (8) Quên mật khẩu và đặt lại thành công trong bản thực có backend; (9) Tài khoản bị vô hiệu không thể thực hiện thao tác; (10) Người có nhiều vai trò vẫn bị giới hạn phạm vi dữ liệu.
+
+## 8. Chất lượng giao diện và dữ liệu
+
+- Dạng enterprise SaaS rõ ràng, tối giản, không trang trí thừa; trạng thái + người xử lý + thời gian chờ luôn dễ thấy.
+- Một màn hình một CTA chính; không tạo nhiều nút màu tím cạnh tranh. Trong chi tiết duyệt, **ngân sách khả dụng trước/sau** phải ở ngay cạnh quyết định.
+- Table nhiều dữ liệu có search/filter/sort/pagination và chỉ số tổng, không dùng bảng giả tĩnh chỉ để trưng bày; badge phải đúng trạng thái thực.
+- Có tính toán tổng tiền nhiều hạng mục, VAT/chi phí liên quan, chặn giá trị không hợp lệ và hiển thị kết quả tiền rõ ràng.
+- Có feedback success/error/empty/loading, modal xác nhận hủy/từ chối, trạng thái readonly, version diff (cũ/mới) và audit timeline.
+- Thông báo chọn vào phải điều hướng đến đúng bản và đúng bước đang chờ, không điều hướng tùy ý.
+- Nếu có backend: lưu dữ liệu thật, quản lý session/quyền, kiểm tra tất cả thao tác thay đổi ở server; chỉ cho thành công sau khi server xác nhận. Nếu chỉ có frontend: dùng dữ liệu giả lập có state/persistence phù hợp, nêu rõ giới hạn; **không thông báo “đã duyệt/đã giữ ngân sách thật” khi chỉ mô phỏng**.
+- Không xây dựng ngoài phạm vi: so sánh báo giá, danh mục nhà cung cấp đầy đủ, tạo/duyệt PO, nhận hàng, quản lý kho/tài sản, hạch toán, thanh toán, chuyển tiền, native mobile app, tích hợp ERP sâu.
+
+## 9. Cách triển khai và bàn giao yêu cầu AI
+
+**Bước 1.** Đọc tài liệu và lập **ma trận điều hướng + vai trò + màn hình + UC**. Nhận diện các điểm chưa được xác nhận; không bịa chính sách. Tóm tắt cách ánh xạ tokens và các component sẽ sử dụng.
+
+**Bước 2.** Tạo shared Design System (tokens → component library → AuthLayout/AppShell). Áp dụng nhất quán cho toàn bộ trang. Không đổi màu, font, spacing/radius.
+
+**Bước 3.** Thiết kế/triển khai lần lượt: đăng nhập → MFA/quên mật khẩu/đăng xuất → dashboard theo vai trò → danh sách/tạo/chi tiết đề nghị → duyệt/ủy quyền → ngân sách/phân bổ/điều chỉnh → thực hiện → import/đối soát → báo cáo → thông báo/quản trị. Mỗi bước phải nối được từ sidebar và các trang liên quan.
+
+**Bước 4.** Nối các nút thành các luồng tương tác có đủ happy path, alternate path và exception path. Thử các kịch bản A–G; kiểm tra số tiền và quyền giữa các màn hình.
+
+**Bước 5.** Bàn giao: (a) sitemap; (b) bảng màn hình ↔ actor ↔ UC; (c) danh sách component và tokens; (d) prototype hoặc mã nguồn/chạy thử (nếu môi trường hỗ trợ); (e) các state desktop/mobile; (f) bảng checklist hành vi và lỗi đã thử; (g) danh sách vấn đề chưa được BRD/SRS phê duyệt.
+
+**Tiêu chí đạt:** Không có trang chết, nút giả không có tác dụng, dữ liệu mâu thuẫn, chức năng vượt phạm vi hoặc UI lệch Design System; luồng duyệt/giữ tiền và đối soát phản ánh chính xác BRD/SRS; tất cả 34 UC gốc có nơi thực hiện/kiểm tra, cùng các màn/UC xác thực bổ sung; 10 nhóm UI nghiệp vụ và nhóm AUTH có thiết kế đầy đủ; giao diện nhất quán trên desktop và mobile.
+
+**Yêu cầu bắt đầu:** Trang đầu tiên của ứng dụng khi chưa xác thực phải là **Đăng nhập**, không phải dashboard. Trước tiên trình bày ngắn cấu trúc màn hình và mappings; sau đó **thực hiện trực tiếp việc thiết kế/triển khai** từ các tài liệu đính kèm. Đừng dừng ở mô tả ý tưởng hoặc một dashboard trang trí. Nếu nền tảng có giới hạn, hoàn thành trước luồng đầu-cuối quan trọng nhất (tạo → gửi → duyệt → giữ → mua hàng → đối soát) và nêu trung thực phần chưa làm được.

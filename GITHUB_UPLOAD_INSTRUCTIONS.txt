@@ -1,0 +1,6 @@
+1. Giai nen ZIP.
+2. Mo thu muc Procure_UI_San_Sang_Day_GitHub.
+3. Cai Git for Windows neu chua co.
+4. Chay PUSH_TO_GITHUB_WINDOWS.bat.
+5. Dang nhap GitHub khi duoc yeu cau.
+6. Kiem tra repo: https://github.com/haianh15/HTQL-ngh-mua-s-m-v-ki-m-so-t-ng-n-s-ch-.git
