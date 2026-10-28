@@ -79,7 +79,7 @@ export const PRDetailView: React.FC = () => {
   const isCreatorSelfApprover =
     isPendingApproval && currentUser?.id === pr.createdById;
 
-  const isCreator = currentUser?.id === pr.createdById;
+  const isCreator = isRequesterRole(currentUser) && currentUser?.id === pr.createdById;
   const canEditOrCancel =
     isCreator && ['DRAFT', 'REVISION_REQUESTED', 'WAITING_FUNDS'].includes(pr.status);
 

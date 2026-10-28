@@ -5,9 +5,10 @@
  * Quản lý nguồn ngân sách, điều chỉnh/chuyển nguồn (TO-BE 03) và nhật ký biến động (Ledger)
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { formatVND } from '../utils/formatters';
+import { heldForRequest, canManageBudget } from '../domain/rules';
 import { BudgetDistributionBar } from '../components/common/BudgetDistributionBar';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
@@ -29,21 +30,35 @@ import {
 export const BudgetManagementView: React.FC = () => {
   const {
     currentUser,
+    activeScreen,
     budgetPools,
     transfers,
     ledgerEntries,
     purchaseRequests,
     currentBranchScope,
     requestBudgetTransfer,
+    releaseUncommittedRemainder,
     approveBudgetTransfer,
     rejectBudgetTransfer,
     navigateTo,
     addToast,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'TRANSFERS' | 'LEDGER' | 'WAITING_PR'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'TRANSFERS' | 'LEDGER' | 'WAITING_PR' | 'RELEASE'>(
+    activeScreen === 'BUDGET_TRANSFERS' ? 'TRANSFERS' : activeScreen === 'BUDGET_WAITING_PR' ? 'WAITING_PR' : 'OVERVIEW'
+  );
+  // Sidebar tài chính có các đường dẫn riêng đến Tổng quan và Điều chuyển nguồn.
+  useEffect(() => {
+    if (activeScreen === 'BUDGET_TRANSFERS') setActiveTab('TRANSFERS');
+    else if (activeScreen === 'BUDGET_WAITING_PR') setActiveTab('WAITING_PR');
+    else if (activeScreen === 'BUDGET_OVERVIEW') setActiveTab('OVERVIEW');
+  }, [activeScreen]);
 
   // Modal chuyển nguồn
+  const [releaseTarget, setReleaseTarget] = useState<string | null>(null);
+  const [releaseAmount, setReleaseAmount] = useState(0);
+  const [releaseReason, setReleaseReason] = useState('');
+  const [procurementConfirmed, setProcurementConfirmed] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [fromBudgetId, setFromBudgetId] = useState(budgetPools[0]?.id || '');
   const [toBudgetId, setToBudgetId] = useState(budgetPools[1]?.id || '');
@@ -56,6 +71,26 @@ export const BudgetManagementView: React.FC = () => {
   );
 
   const waitingFundsPRs = purchaseRequests.filter((pr) => pr.status === 'WAITING_FUNDS');
+  const financeCanRelease = canManageBudget(currentUser);
+  // Only requests that were actually taken up by purchasing and have an
+  // uncommitted balance can be reviewed for release. Confirmation is manual
+  // in this browser demo; server implementation must verify proof of closure.
+  const possibleReleases = purchaseRequests.filter(pr =>
+    pr.status === 'IN_PROGRESS' && !!pr.execution?.receivedAt &&
+    (pr.execution?.actualOrderedAmount || 0) > 0 && heldForRequest(pr) > 0
+  );
+  const selectedRelease = possibleReleases.find(pr => pr.id === releaseTarget);
+  const handleRelease = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!financeCanRelease || !selectedRelease || !procurementConfirmed || !releaseReason.trim() ||
+        !Number.isSafeInteger(releaseAmount) || releaseAmount <= 0 || releaseAmount > heldForRequest(selectedRelease)) {
+      addToast('Cần xác nhận Mua hàng đã đóng nghĩa vụ và nhập số tiền giải phóng hợp lệ.', 'warning');
+      return;
+    }
+    releaseUncommittedRemainder(selectedRelease.id, releaseAmount, `Xác nhận Mua hàng không còn nghĩa vụ: ${releaseReason.trim()}`);
+    setReleaseTarget(null); setReleaseAmount(0); setReleaseReason(''); setProcurementConfirmed(false);
+  };
+
 
   const handleCreateTransfer = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,13 +123,11 @@ export const BudgetManagementView: React.FC = () => {
           </p>
         </div>
 
-        <Button
+        {financeCanRelease && <Button
           variant="primary"
           onClick={() => setIsTransferModalOpen(true)}
           icon={<ArrowRightLeft className="w-4 h-4" />}
-        >
-          Đề nghị điều chuyển nguồn
-        </Button>
+        >Đề nghị điều chuyển nguồn</Button>}
       </div>
 
       {/* Tabs */}
@@ -159,6 +192,11 @@ export const BudgetManagementView: React.FC = () => {
             {waitingFundsPRs.length}
           </span>
         </button>
+        {financeCanRelease && <button
+          type="button"
+          onClick={() => setActiveTab('RELEASE')}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 whitespace-nowrap ${activeTab === 'RELEASE' ? 'border-[#5540C7] text-[#5540C7]' : 'border-transparent text-[#62657A]'}`}
+        >Giải phóng giữ dư ({possibleReleases.length})</button>}
       </div>
 
       {/* Tab 1: Tổng quan nguồn ngân sách */}
@@ -299,7 +337,7 @@ export const BudgetManagementView: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                      {trf.status === 'PENDING_APPROVAL' ? (
+                      {trf.status === 'PENDING_APPROVAL' && currentUser?.roles.includes('bod') ? (
                         <div className="flex items-center justify-center gap-1.5">
                           <Button
                             variant="primary"
@@ -452,7 +490,7 @@ export const BudgetManagementView: React.FC = () => {
                           {formatVND(avail)} (Thiếu {formatVND(pr.totalAmount - avail)})
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <Button
+                          {financeCanRelease && <Button
                             variant="secondary"
                             size="small"
                             onClick={() => {
@@ -463,7 +501,7 @@ export const BudgetManagementView: React.FC = () => {
                             }}
                           >
                             Điều chuyển bổ sung nguồn →
-                          </Button>
+                          </Button>}
                         </td>
                       </tr>
                     );
@@ -475,9 +513,43 @@ export const BudgetManagementView: React.FC = () => {
         </div>
       )}
 
+      {activeTab === 'RELEASE' && financeCanRelease && <div className="bg-white border border-[#DDE0EA] rounded-[16px] overflow-hidden">
+        <div className="p-5 border-b border-[#DDE0EA]">
+          <h2 className="text-base font-bold text-[#202039]">Xác nhận giải phóng ngân sách đang giữ</h2>
+          <p className="text-xs text-[#62657A] mt-1">Tài chính chỉ thực hiện khi Mua hàng đã xác nhận phần dư không còn nghĩa vụ. Bản demo chưa hỗ trợ đính kèm biên bản đối soát.</p>
+        </div>
+        <div className="overflow-x-auto"><table className="w-full text-sm text-left">
+          <thead className="bg-[#F7F8FC] text-xs text-[#62657A]"><tr><th className="p-3">Mã / Đề nghị</th><th className="p-3">Nhà cung cấp</th><th className="p-3 text-right">Giữ còn lại</th><th className="p-3 text-center">Xác nhận</th></tr></thead>
+          <tbody className="divide-y divide-[#DDE0EA]">{possibleReleases.map(pr => <tr key={pr.id}>
+            <td className="p-3"><strong className="text-[#5540C7]">{pr.id}</strong><div className="text-xs text-[#62657A]">{pr.title}</div></td>
+            <td className="p-3">{pr.execution?.supplierName || 'Chưa rõ'}</td>
+            <td className="p-3 text-right tabular-nums">{formatVND(heldForRequest(pr))}</td>
+            <td className="p-3 text-center"><Button size="small" variant="secondary" onClick={() => {
+              setReleaseTarget(pr.id);setReleaseAmount(heldForRequest(pr));setReleaseReason('');setProcurementConfirmed(false);
+            }}>Kiểm tra & giải phóng</Button></td>
+          </tr>)}
+          {possibleReleases.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-[#62657A]">Không có phần giữ dư đang chờ xác nhận.</td></tr>}
+          </tbody>
+        </table></div>
+      </div>}
+
+      <Modal isOpen={!!releaseTarget} onClose={() => setReleaseTarget(null)} title={`Xác nhận giải phóng ${selectedRelease?.id || ''}`} maxWidth="md">
+        <form onSubmit={handleRelease} className="space-y-4 text-sm">
+          <p className="text-xs text-[#62657A]">Chỉ giải phóng phần không còn nghĩa vụ sau khi đối chiếu với Mua hàng. Số giữ còn lại: <strong>{formatVND(selectedRelease ? heldForRequest(selectedRelease) : 0)}</strong>.</p>
+          <div><label className="block text-xs font-semibold mb-1">Số tiền giải phóng (VND)</label>
+            <input type="number" min="1" required step="1" max={selectedRelease ? heldForRequest(selectedRelease) : 0} value={releaseAmount || ''} onChange={e => setReleaseAmount(Number(e.target.value))}
+              className="w-full p-2.5 border border-[#DDE0EA] rounded-[8px]" /></div>
+          <div><label className="block text-xs font-semibold mb-1">Căn cứ / lý do xác nhận hết nghĩa vụ</label>
+            <textarea required rows={3} value={releaseReason} onChange={e => setReleaseReason(e.target.value)} className="w-full p-2.5 border border-[#DDE0EA] rounded-[8px]" placeholder="Ví dụ: Mua hàng đã xác nhận hoàn tất đặt hàng, phần chênh lệch không còn nghĩa vụ." /></div>
+          <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={procurementConfirmed} onChange={e => setProcurementConfirmed(e.target.checked)} />
+            Tôi đã kiểm tra xác nhận của Mua hàng và bảo đảm số tiền này không còn nghĩa vụ phát sinh.</label>
+          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setReleaseTarget(null)}>Hủy</Button><Button type="submit" variant="primary">Xác nhận giải phóng</Button></div>
+        </form>
+      </Modal>
+
       {/* Modal: Đề nghị điều chuyển nguồn (TO-BE 03) */}
       <Modal
-        isOpen={isTransferModalOpen}
+        isOpen={isTransferModalOpen && financeCanRelease}
         onClose={() => setIsTransferModalOpen(false)}
         title="Lập đề nghị điều chuyển / bổ sung nguồn ngân sách"
         maxWidth="lg"

@@ -1,0 +1,15 @@
+PROCURE UI V7 – HUONG DAN CAP NHAT
+
+1) TAI VA GIAI NEN ZIP. Giu nguyen cau truc thu muc src/... va tests/...
+2) Tren Windows da cai Git, chay CAP_NHAT_GITHUB_WINDOWS.bat de clone repository,
+   ghi de DUY NHAT nhung file co trong goi va git push nhanh main.
+3) Hoac thay tung file trong src/... vao dung duong dan tuong ung tren GitHub.
+4) Sau khi Vercel build thanh cong, dang xuat, Ctrl+Shift+R va dang nhap lai.
+5) Dung lan luot tai khoan mau cua 8 vai tro de xem menu va du lieu.
+
+LUU Y:
+- Khong thay the tat ca src, chi thay cac file trong ZIP.
+- Neu dang co chinh sua rieng tren GitHub, hay xem diff truoc khi ghi de.
+- Khong bao gio git push --force. Script khong tu thay doi cac file khac.
+- Day la frontend demo, khong phai backend phan quyen bao mat that.
+- Khong cam ket Vercel build da thanh cong: chua co dieu kien cai npm de build.

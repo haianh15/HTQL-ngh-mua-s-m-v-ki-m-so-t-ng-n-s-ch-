@@ -4,7 +4,7 @@
  * Procure UI — Approval Queue View (UI-04, UC-PD01, UC-PD02, UC-PD04, UC-PD05, UC-NS05)
  */
 
-import { canApproveStep, eligibleDelegation } from '../domain/rules';
+import { canApproveStep, eligibleDelegation, canReadRequest, primaryRole } from '../domain/rules';
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { formatVND, getPRStatusBadgeInfo } from '../utils/formatters';
@@ -42,7 +42,7 @@ export const ApprovalQueueView: React.FC = () => {
   // Tab 1: Chờ tôi xử lý
   const pendingForMe = useMemo(() => {
     return purchaseRequests.filter((pr) => {
-      if (!['PENDING_DEPT', 'PENDING_FINANCE', 'PENDING_FINAL'].includes(pr.status)) return false;
+      if (!canReadRequest(currentUser,pr) || !['PENDING_DEPT', 'PENDING_FINANCE', 'PENDING_FINAL'].includes(pr.status)) return false;
       const step = pr.approvalTimeline[pr.currentStepIndex];
       if (!step || step.status !== 'PENDING') return false;
 
@@ -55,20 +55,16 @@ export const ApprovalQueueView: React.FC = () => {
   }, [purchaseRequests, currentUser]);
 
   // Tab 2: Đã xử lý bởi tôi
-  const processedByMe = useMemo(() => {
-    return purchaseRequests.filter((pr) => {
-      return pr.approvalTimeline.some(
-        (step) =>
-          step.decidedByName === currentUser?.name ||
-          (step.status !== 'PENDING' && currentUser?.roles.includes(step.assignedRole))
-      );
-    });
-  }, [purchaseRequests, currentUser]);
+  const processedByMe = useMemo(() => purchaseRequests.filter(pr =>
+    canReadRequest(currentUser,pr) && pr.approvalTimeline.some(step =>
+      step.status!=='PENDING' && (step.decidedBy===currentUser?.id || step.decidedByName===currentUser?.name)
+    )
+  ),[purchaseRequests,currentUser]);
 
   // Tab 3: Quá hạn / Cần ưu tiên (> 48h hoặc gần ngày cần)
   const overduePRs = useMemo(() => {
     return purchaseRequests.filter((pr) => {
-      if (!['PENDING_DEPT', 'PENDING_FINANCE', 'PENDING_FINAL'].includes(pr.status)) return false;
+      if (!canApproveStep(currentUser,pr,delegations)) return false;
       const parts = pr.createdAt.split(/[ ,:]/)[0].split('/');
       if (parts.length !== 3) return false;
       const created = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
@@ -80,7 +76,7 @@ export const ApprovalQueueView: React.FC = () => {
   const delegatedPRs = useMemo(() => {
     if (myDelegations.length === 0) return [];
     return purchaseRequests.filter((pr) => {
-      if (!['PENDING_DEPT', 'PENDING_FINANCE', 'PENDING_FINAL'].includes(pr.status)) return false;
+      if (!canReadRequest(currentUser,pr) || !['PENDING_DEPT', 'PENDING_FINANCE', 'PENDING_FINAL'].includes(pr.status)) return false;
       const step = pr.approvalTimeline[pr.currentStepIndex];
       if (!step || step.status !== 'PENDING') return false;
 
@@ -155,7 +151,7 @@ export const ApprovalQueueView: React.FC = () => {
     <div className="space-y-6">
       {/* Page Title */}
       <div>
-        <h1 className="text-2xl font-bold text-[#202039] m-0">Hàng chờ phê duyệt</h1>
+        <h1 className="text-2xl font-bold text-[#202039] m-0">{primaryRole(currentUser)==='finance' ? 'Hồ sơ chờ kiểm tra ngân sách' : primaryRole(currentUser)==='dept_head' ? 'Đề nghị chờ trưởng phòng duyệt' : 'Hàng chờ phê duyệt'}</h1>
         <p className="text-xs text-[#62657A] mt-1 m-0">
           Xử lý phê duyệt hồ sơ mua sắm theo thẩm quyền, hạn mức và ủy quyền (SRS UC-PD01..05, UC-NS05)
         </p>

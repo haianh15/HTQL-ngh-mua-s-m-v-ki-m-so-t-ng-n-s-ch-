@@ -69,7 +69,7 @@ export const PurchaseRequestsView: React.FC = () => {
   const paginatedPRs = filteredPRs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const tabs = [
-    { id: 'ALL', label: requesterOnly ? 'Đề nghị của tôi' : 'Tất cả đề nghị', count: visiblePRs.length },
+    { id: 'ALL', label: requesterOnly ? 'Đề nghị của tôi' : 'Đề nghị trong phạm vi', count: visiblePRs.length },
     {
       id: 'PENDING',
       label: 'Đang chờ duyệt',

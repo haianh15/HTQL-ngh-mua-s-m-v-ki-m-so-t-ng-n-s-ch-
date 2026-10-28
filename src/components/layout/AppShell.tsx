@@ -5,7 +5,7 @@
  * Tuân thủ chính xác Design System layout & spacing
  */
 
-import { canSeeBranch, canViewAllRegions, canViewDashboard, canAccessScreen, isRequesterRole } from '../../domain/rules';
+import { canSeeBranch, canViewAllRegions, canViewDashboard, canAccessScreen, isRequesterRole, primaryRole } from '../../domain/rules';
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ActiveScreen, BranchCode } from '../../types';
@@ -52,103 +52,39 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
   const [isChangePwOpen, setIsChangePwOpen] = useState(false);
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
-  const requesterOnly = isRequesterRole(currentUser);
-
-  // Quyền kiểm soát menu theo vai trò
-  const isApprover =
-    currentUser?.roles.some((r) => ['dept_head', 'branch_director', 'finance', 'bod'].includes(r));
-  const isFinance = currentUser?.roles.includes('finance') || currentUser?.roles.includes('bod');
-  const isProcurement = currentUser?.roles.includes('procurement');
-  const isAccountant = currentUser?.roles.includes('accountant') || currentUser?.roles.includes('finance');
-  const isAdmin = currentUser?.roles.includes('admin');
-
-  interface NavItem {
-    id: ActiveScreen;
-    label: string;
-    icon: React.ReactNode;
-    badge?: number;
-    visible: boolean;
-  }
-
-  const navItems: { group: string; items: NavItem[] }[] = requesterOnly ? [{
-    group: 'Đề nghị mua sắm',
-    items: [
-      { id: 'PR_LIST', label: 'Đề nghị của tôi', icon: <FileText className="w-4 h-4" />, visible: true },
-      { id: 'PR_CREATE', label: 'Lập đề nghị', icon: <FileText className="w-4 h-4" />, visible: true },
-    ],
-  }] : [
-    {
-      group: 'Tổng quan & Nghiệp vụ',
-      items: [
-        {
-          id: 'DASHBOARD',
-          label: 'Tổng quan',
-          icon: <LayoutDashboard className="w-4 h-4" />,
-          visible: canViewDashboard(currentUser),
-        },
-        {
-          id: 'PR_LIST',
-          label: 'Đề nghị mua sắm',
-          icon: <FileText className="w-4 h-4" />,
-          visible: canAccessScreen(currentUser, 'PR_LIST'),
-        },
-        {
-          id: 'APPROVAL_QUEUE',
-          label: 'Hàng chờ phê duyệt',
-          icon: <CheckSquare className="w-4 h-4" />,
-          visible: canAccessScreen(currentUser, 'APPROVAL_QUEUE'),
-        },
-      ],
-    },
-    {
-      group: 'Ngân sách & Thực hiện',
-      items: [
-        {
-          id: 'BUDGET_OVERVIEW',
-          label: 'Quản lý ngân sách',
-          icon: <PieChart className="w-4 h-4" />,
-          visible: canAccessScreen(currentUser, 'BUDGET_OVERVIEW'),
-        },
-        {
-          id: 'EXECUTION_LIST',
-          label: 'Thực hiện mua sắm',
-          icon: <ShoppingBag className="w-4 h-4" />,
-          visible: canAccessScreen(currentUser, 'EXECUTION_LIST'),
-        },
-        {
-          id: 'RECONCILIATION_IMPORT',
-          label: 'Đối soát & Nhập file',
-          icon: <Receipt className="w-4 h-4" />,
-          visible: canAccessScreen(currentUser, 'RECONCILIATION_IMPORT'),
-        },
-      ],
-    },
-    {
-      group: 'Báo cáo & Quản trị',
-      items: [
-        {
-          id: 'REPORTS',
-          label: 'Báo cáo & Phân tích',
-          icon: <BarChart3 className="w-4 h-4" />,
-          visible: canAccessScreen(currentUser, 'REPORTS'),
-        },
-        {
-          id: 'NOTIFICATIONS',
-          label: 'Trung tâm thông báo',
-          icon: <Bell className="w-4 h-4" />,
-          badge: unreadCount > 0 ? unreadCount : undefined,
-          visible: true,
-        },
-        {
-          id: 'ADMIN_MANAGEMENT',
-          label: 'Quản trị hệ thống',
-          icon: <Settings className="w-4 h-4" />,
-          visible: !!isAdmin,
-        },
-      ],
-    },
-  ];
+  const role = primaryRole(currentUser);
+  const requesterOnly = role === 'requester';
+  const unreadCount = requesterOnly ? 0 : notifications.filter(n=>!n.isRead).length;
+  interface NavItem { id: ActiveScreen; label: string; icon: React.ReactNode; badge?: number; visible:boolean; }
+  const icons: Record<string, React.ReactNode> = {
+    DASHBOARD:<LayoutDashboard className="w-4 h-4" />,
+    PR_LIST:<FileText className="w-4 h-4" />,
+    PR_CREATE:<FileText className="w-4 h-4" />,
+    APPROVAL_QUEUE:<CheckSquare className="w-4 h-4" />,
+    BUDGET_OVERVIEW:<PieChart className="w-4 h-4" />,
+    BUDGET_TRANSFERS:<PieChart className="w-4 h-4" />,
+    EXECUTION_LIST:<ShoppingBag className="w-4 h-4" />,
+    RECONCILIATION_IMPORT:<Receipt className="w-4 h-4" />,
+    REPORTS:<BarChart3 className="w-4 h-4" />,
+    NOTIFICATIONS:<Bell className="w-4 h-4" />,
+    ADMIN_MANAGEMENT:<Settings className="w-4 h-4" />,
+  };
+  type NavSpec={id:ActiveScreen;label:string};
+  const navByRole:Record<string,{group:string;entries:NavSpec[]}> = {
+    requester:{group:'Đề nghị cá nhân',entries:[{id:'PR_LIST',label:'Đề nghị của tôi'},{id:'PR_CREATE',label:'Lập đề nghị'}]},
+    dept_head:{group:'Quản lý phòng ban',entries:[{id:'APPROVAL_QUEUE',label:'Hàng chờ duyệt của phòng'},{id:'PR_LIST',label:'Đề nghị của phòng'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
+    finance:{group:'Tài chính – Ngân sách',entries:[{id:'DASHBOARD',label:'Tổng quan ngân sách'},{id:'APPROVAL_QUEUE',label:'Kiểm tra nguồn ngân sách'},{id:'BUDGET_OVERVIEW',label:'Quản lý ngân sách'},{id:'BUDGET_TRANSFERS',label:'Điều chuyển nguồn'},{id:'PR_LIST',label:'Tra cứu đề nghị'},{id:'REPORTS',label:'Báo cáo ngân sách'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
+    procurement:{group:'Mua hàng',entries:[{id:'DASHBOARD',label:'Tổng quan mua hàng'},{id:'EXECUTION_LIST',label:'Tiếp nhận & Thực hiện'},{id:'PR_LIST',label:'Hồ sơ đã duyệt'},{id:'REPORTS',label:'Báo cáo mua hàng'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
+    accountant:{group:'Kế toán – Đối soát',entries:[{id:'DASHBOARD',label:'Tổng quan kế toán'},{id:'RECONCILIATION_IMPORT',label:'Nhập chứng từ & Đối soát'},{id:'PR_LIST',label:'Hồ sơ đã duyệt'},{id:'REPORTS',label:'Báo cáo kế toán'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
+    branch_director:{group:'Điều hành chi nhánh',entries:[{id:'DASHBOARD',label:'Tổng quan chi nhánh'},{id:'APPROVAL_QUEUE',label:'Hàng chờ phê duyệt'},{id:'PR_LIST',label:'Đề nghị chi nhánh'},{id:'REPORTS',label:'Báo cáo chi nhánh'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
+    bod:{group:'Ban Giám đốc',entries:[{id:'DASHBOARD',label:'Tổng quan toàn công ty'},{id:'APPROVAL_QUEUE',label:'Phê duyệt cấp cao'},{id:'PR_LIST',label:'Đề nghị toàn công ty'},{id:'BUDGET_OVERVIEW',label:'Giám sát ngân sách'},{id:'BUDGET_TRANSFERS',label:'Xét duyệt điều chuyển'},{id:'REPORTS',label:'Báo cáo toàn công ty'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
+    admin:{group:'Quản trị hệ thống',entries:[{id:'ADMIN_MANAGEMENT',label:'Tài khoản & Phân quyền'}]},
+  };
+  const spec = role ? navByRole[role] : undefined;
+  const navItems:{group:string;items:NavItem[]}[] = spec ? [{group:spec.group,items:spec.entries.map(({id,label})=>({
+    id,label,icon:icons[id]||<FileText className="w-4 h-4" />,badge:id==='NOTIFICATIONS'?unreadCount||undefined:undefined,
+    visible:canAccessScreen(currentUser,id),
+  }))}]:[];
 
   const handleNavClick = (screen: ActiveScreen) => {
     navigateTo(screen);
@@ -232,7 +168,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
         </nav>
 
         {/* Scenario Test Button */}
-        {currentUser?.roles.includes('bod') && <div className="p-3 border-t border-[#DDE0EA]">
+        {role === 'bod' && <div className="p-3 border-t border-[#DDE0EA]">
           <button
             type="button"
             onClick={onOpenScenarioModal}

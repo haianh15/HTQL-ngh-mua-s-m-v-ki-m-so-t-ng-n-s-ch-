@@ -25,6 +25,7 @@ import {
 
 export const AdminView: React.FC = () => {
   const {
+    currentUser,
     users,
     delegations,
     auditLogs,
@@ -63,7 +64,11 @@ export const AdminView: React.FC = () => {
 
   const handleSaveUserPermissions = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingUserId) return;
+    if (!editingUserId || editRoles.length !== 1 ||
+        editRoles.some(r=>['bod','admin'].includes(r)) || editBranch!==currentUser?.branchId) {
+      addToast('Chỉ chọn một vai trò nghiệp vụ trong chi nhánh được quản trị.', 'error');
+      return;
+    }
     updateUserRolesAndScope(editingUserId, editRoles, editBranch);
     setEditingUserId(null);
   };
@@ -223,6 +228,7 @@ export const AdminView: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
+                        {u.id!==currentUser?.id && !u.roles.some(r=>['bod','admin'].includes(r)) ? <>
                         <Button
                           variant="secondary"
                           size="small"
@@ -236,7 +242,7 @@ export const AdminView: React.FC = () => {
                           onClick={() => toggleUserActive(u.id)}
                         >
                           {u.isActive ? 'Khóa' : 'Kích hoạt'}
-                        </Button>
+                        </Button></> : <span className="text-xs text-[#62657A]">Bảo vệ tài khoản</span>}
                       </div>
                     </td>
                   </tr>
@@ -467,23 +473,15 @@ export const AdminView: React.FC = () => {
             <label className="block text-xs font-semibold text-[#202039] mb-1">
               Phạm vi Chi nhánh quản lý:
             </label>
-            <select
-              value={editBranch}
-              onChange={(e) => setEditBranch(e.target.value as BranchCode)}
-              className="w-full p-2.5 text-xs bg-white border border-[#DDE0EA] rounded-[8px]"
-            >
-              <option value="HQ">Trụ sở chính Hà Nội (HQ)</option>
-              <option value="BR_HN">Chi nhánh Hà Nội</option>
-              <option value="BR_HCM">Chi nhánh TP. Hồ Chí Minh</option>
-              <option value="BR_DN">Chi nhánh Đà Nẵng</option>
-              <option value="BR_CT">Chi nhánh Cần Thơ</option>
-              <option value="BR_HP">Chi nhánh Hải Phòng</option>
+            <select value={editBranch} disabled aria-label="Phạm vi chi nhánh cố định"
+              className="w-full p-2.5 text-xs bg-[#F7F8FC] border border-[#DDE0EA] rounded-[8px]">
+              <option value={currentUser?.branchId || 'HQ'}>{currentUser?.branchId || 'HQ'} – Phạm vi quản trị được cấp</option>
             </select>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-[#202039] mb-1">
-              Các vai trò được cấp:
+              Vai trò nghiệp vụ (chọn đúng một):
             </label>
             <div className="grid grid-cols-2 gap-2 p-2 bg-[#F7F8FC] rounded-[8px] border border-[#DDE0EA]">
               {[
@@ -493,22 +491,15 @@ export const AdminView: React.FC = () => {
                 { id: 'finance', label: 'Tài chính ngân sách' },
                 { id: 'procurement', label: 'Phòng Mua hàng' },
                 { id: 'accountant', label: 'Kế toán đối soát' },
-                { id: 'bod', label: 'Ban Giám đốc (BOD)' },
-                { id: 'admin', label: 'Quản trị hệ thống' },
               ].map((r) => {
                 const checked = editRoles.includes(r.id as UserRole);
                 return (
                   <label key={r.id} className="flex items-center gap-2 cursor-pointer">
                     <input
-                      type="checkbox"
+                      type="radio"
+                      name="user-role"
                       checked={checked}
-                      onChange={() => {
-                        if (checked) {
-                          setEditRoles(editRoles.filter((x) => x !== r.id));
-                        } else {
-                          setEditRoles([...editRoles, r.id as UserRole]);
-                        }
-                      }}
+                      onChange={() => setEditRoles([r.id as UserRole])}
                       className="rounded text-[#5540C7]"
                     />
                     <span>{r.label}</span>

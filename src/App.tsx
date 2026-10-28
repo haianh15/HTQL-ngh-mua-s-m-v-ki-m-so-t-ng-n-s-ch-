@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { canAccessScreen } from './domain/rules';
+import { canAccessScreen, canReadRequest } from './domain/rules';
 import { AppProvider, useApp } from './context/AppContext';
 import { AppShell } from './components/layout/AppShell';
 import { ToastContainer } from './components/common/Toast';
@@ -60,7 +60,7 @@ const MainRouter: React.FC = () => {
   // Kiểm tra quyền màn hình đồng nhất với sidebar và tầng dữ liệu.
   // Đây là RBAC phía frontend của prototype; backend thật vẫn phải xác thực mọi API.
   const forbidden = !canAccessScreen(currentUser, activeScreen) ||
-    (activeScreen === 'PR_DETAIL' && (!selectedPrId || !purchaseRequests.some(pr=>pr.id===selectedPrId))) ||
+    (activeScreen === 'PR_DETAIL' && (!selectedPrId || !purchaseRequests.some(pr=>pr.id===selectedPrId && canReadRequest(currentUser,pr)))) ||
     (activeScreen === 'PR_EDIT' && (!selectedPrId || !purchaseRequests.some(pr=>pr.id===selectedPrId && pr.status==='DRAFT' && pr.createdById===currentUser?.id)));
   if (forbidden) return <AppShell onOpenScenarioModal={() => setIsScenarioModalOpen(true)}><ForbiddenPage /></AppShell>;
 

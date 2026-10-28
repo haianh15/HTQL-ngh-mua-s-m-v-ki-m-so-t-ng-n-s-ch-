@@ -34,7 +34,7 @@ import {
   INITIAL_AUDIT_LOGS,
 } from '../data/initialData';
 import { ToastMessage } from '../components/common/Toast';
-import { DEMO_PASSWORD, DEMO_OTP, availableBudget, canSeeBranch, canApproveStep, canViewAllRegions, canReadRequest, canAccessScreen, defaultScreenFor, isValidPRItems, isValidAmount, reserveBudget, commitBudget, recognizeExpense, releaseHold, transferBudget, heldForRequest, isRequesterRole } from '../domain/rules';
+import { DEMO_PASSWORD, DEMO_OTP, availableBudget, canSeeBranch, canApproveStep, canViewAllRegions, canReadRequest, canAccessScreen, defaultScreenFor, isValidPRItems, isValidAmount, reserveBudget, commitBudget, recognizeExpense, releaseHold, transferBudget, heldForRequest, isRequesterRole, primaryRole, canReadBudget, canSeeFinancialFigures, canManageBudget, canExecutePurchase, canReconcile, canManageUsers } from '../domain/rules';
 
 interface AppContextType {
   // Auth state
@@ -189,12 +189,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [isAuthenticated]);
 
   // Bộ lọc dữ liệu cốt lõi: áp dụng cho bảng, biểu đồ, tìm kiếm, export, không chỉ menu.
-  const permittedBudgetPools = budgetPools.filter(b =>
-    canSeeBranch(currentUser, b.branchId) &&
-    (isRequesterRole(currentUser) ? b.departmentId === currentUser.departmentId :
-      (currentUser?.roles.some(r => ['bod','branch_director','finance','procurement','accountant'].includes(r)) ||
-      (currentUser?.roles.includes('dept_head') && b.departmentId === currentUser.departmentId)))
-  );
+  const permittedBudgetPools = budgetPools.filter(b => canReadBudget(currentUser,b) ||
+    // Nguồn chỉ dùng để chọn khi Lập đề nghị / xem tham chiếu, số dư bị che ở Provider.
+    (['requester','dept_head'].includes(primaryRole(currentUser)||'') &&
+      b.branchId===currentUser?.branchId && b.departmentId===currentUser?.departmentId) ||
+    (primaryRole(currentUser)==='procurement' && b.branchId===currentUser?.branchId));
   const permittedPRs = purchaseRequests.filter(pr => canReadRequest(currentUser, pr));
 
   // Toasts
@@ -344,8 +343,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const toggleUserActive = (userId: string) => {
     const target = users.find(u => u.id === userId);
-    if (!currentUser?.roles.includes('admin') || currentUser.id === userId || !target ||
-        target.branchId !== currentUser.branchId) {
+    if (!canManageUsers(currentUser) || currentUser?.id === userId || !target ||
+        ['bod','admin'].some(r=>target.roles.includes(r as User['roles'][number])) || target.branchId !== currentUser?.branchId) {
       addToast('Chỉ quản trị viên có thể cập nhật tài khoản khác.', 'error'); return;
     }
     setUsers((prev) =>
@@ -363,9 +362,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateUserRolesAndScope = (userId: string, roles: User['roles'], branchId: BranchCode) => {
     const target = users.find(u => u.id === userId);
-    if (!currentUser?.roles.includes('admin') || !target ||
-        target.branchId !== currentUser.branchId || branchId !== currentUser.branchId ||
-        roles.some(r => ['bod', 'admin'].includes(r))) {
+    if (!canManageUsers(currentUser) || !target || target.id===currentUser?.id ||
+        target.branchId !== currentUser?.branchId || branchId !== currentUser?.branchId ||
+        roles.length !== 1 || roles.some(r => ['bod', 'admin'].includes(r)) ||
+        target.roles.some(r => ['bod','admin'].includes(r))) {
       addToast('Không có quyền thay đổi tài khoản ngoài khu vực hoặc cấp quyền lãnh đạo/quản trị.', 'error'); return;
     }
     setUsers((prev) =>
@@ -377,17 +377,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // PR CRUD
   const createPurchaseRequest = (data: Partial<PurchaseRequest>, items: PRItem[], isDraft = false): string => {
-    if (!currentUser || !currentUser.isActive || !canAccessScreen(currentUser,'PR_CREATE')) { addToast('Bạn không có quyền tạo đề nghị.', 'error'); return ''; }
+    if (!currentUser || !currentUser.isActive || primaryRole(currentUser)!=='requester') { addToast('Bạn không có quyền tạo đề nghị.', 'error'); return ''; }
     if (!isDraft && !isValidPRItems(items)) { addToast('Danh sách hạng mục chưa hợp lệ.', 'error'); return ''; }
-    if (data.budgetId && !budgetPools.some(b => b.id === data.budgetId && b.branchId === currentUser.branchId &&
-      (b.departmentId === currentUser.departmentId || currentUser.roles.some(r => ['finance','bod','branch_director'].includes(r))))) {
+    if (!data.budgetId || !budgetPools.some(b => b.id === data.budgetId && b.branchId === currentUser.branchId && b.departmentId === currentUser.departmentId)) {
       addToast('Nguồn ngân sách không thuộc phạm vi được phép.', 'error'); return '';
     }
     const prNumber = Math.max(43, ...purchaseRequests.map(pr=>Number(pr.id.match(/PR-2026-(\d+)/)?.[1] || 0))) + 1;
     const newPrId = `PR-2026-${String(prNumber).padStart(3,'0')}`;
     const totalAmount = items.reduce((sum, it) => sum + it.totalPrice, 0);
 
-    const budget = budgetPools.find((b) => b.id === data.budgetId) || budgetPools[0];
+    const budget = budgetPools.find(b=>b.id===data.budgetId && b.branchId===currentUser.branchId && b.departmentId===currentUser.departmentId)!;
     const available = budget.allocated + (budget.adjustments || 0) - budget.held - budget.committed - budget.used;
 
     // Xác định cấp duyệt cuối theo BRD:
@@ -508,7 +507,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateDraftPR = (prId: string, data: Partial<PurchaseRequest>, items: PRItem[], submitNow = false) => {
     const pr = purchaseRequests.find(p => p.id === prId);
-    if (!pr || pr.createdById !== currentUser?.id || pr.status !== 'DRAFT') {
+    if (!pr || !canAccessScreen(currentUser,'PR_EDIT') || pr.createdById !== currentUser?.id || pr.status !== 'DRAFT') {
       addToast('Chỉ người tạo mới được sửa hồ sơ đang ở trạng thái Nháp.', 'error'); return false;
     }
     const totalAmount = items.reduce((sum, it) => sum + it.totalPrice, 0);
@@ -525,7 +524,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const submitDraftPR = (prId: string): boolean => {
     const pr = purchaseRequests.find(p => p.id === prId);
-    if (!pr || pr.status !== 'DRAFT' || pr.createdById !== currentUser?.id || !isValidPRItems(pr.items) ||
+    if (!pr || !canAccessScreen(currentUser,'PR_EDIT') || pr.status !== 'DRAFT' || pr.createdById !== currentUser?.id || !isValidPRItems(pr.items) ||
         !pr.title.trim() || !pr.purpose.trim() || !pr.budgetId) {
       addToast('Hồ sơ nháp thiếu thông tin hoặc bạn không có quyền gửi.', 'error'); return false;
     }
@@ -544,7 +543,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // TO-BE 01 / TO-BE 02: Phiên bản sửa sau duyệt hoặc sau yêu cầu bổ sung
   const createPRRevision = (prId: string, newItems: PRItem[], changeSummary: string) => {
     const pr = purchaseRequests.find((p) => p.id === prId);
-    if (!pr || pr.createdById !== currentUser?.id ||
+    if (!pr || !isRequesterRole(currentUser) || !canAccessScreen(currentUser,'PR_DETAIL') || pr.createdById !== currentUser?.id ||
         !['APPROVED', 'REVISION_REQUESTED'].includes(pr.status) ||
         pr.execution?.actualOrderedAmount) return false;
     if (!changeSummary.trim() || !isValidPRItems(newItems)) return false;
@@ -601,7 +600,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const requestPRCancel = (prId: string, reason: string) => {
     const pr = purchaseRequests.find((p) => p.id === prId);
-    if (!pr || pr.createdById !== currentUser?.id || !reason.trim() ||
+    if (!pr || !isRequesterRole(currentUser) || pr.createdById !== currentUser?.id || !reason.trim() ||
         !['DRAFT','REVISION_REQUESTED','WAITING_FUNDS'].includes(pr.status)) return false;
     if (pr.execution?.actualOrderedAmount || pr.execution?.actualRecordedAmount ||
         pr.versions.some(v => v.isEffective && pr.status !== 'APPROVED') ||
@@ -920,7 +919,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // TO-BE 02: Mua hàng tiếp nhận & ghi nhận đặt hàng
   const receivePRForProcurement = (prId: string) => {
     const pr = purchaseRequests.find(p => p.id === prId);
-    if (!pr || !currentUser?.roles.includes('procurement') || !canSeeBranch(currentUser,pr.branchId) || !['APPROVED','IN_PROGRESS'].includes(pr.status)) {
+    if (!pr || !canExecutePurchase(currentUser) || !canSeeBranch(currentUser,pr.branchId) || !['APPROVED','IN_PROGRESS'].includes(pr.status)) {
       addToast('Chỉ Mua hàng được tiếp nhận hồ sơ có bản duyệt hợp lệ.', 'error'); return;
     }
     setPurchaseRequests(prev => prev.map(p => p.id !== prId ? p : {
@@ -939,7 +938,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const recordActualPOOrder = (prId: string, actualAmount: number, poRef: string, supplierName: string) => {
     const pr = purchaseRequests.find(p => p.id === prId);
     const budget = budgetPools.find(b => b.id === pr?.budgetId);
-    if (!pr || !budget || !currentUser?.roles.includes('procurement') || !canSeeBranch(currentUser,pr.branchId) ||
+    if (!pr || !budget || !canExecutePurchase(currentUser) || !canSeeBranch(currentUser,pr.branchId) ||
         !['APPROVED','IN_PROGRESS'].includes(pr.status) || !isValidAmount(actualAmount) ||
         !poRef.trim() || !supplierName.trim()) { addToast('Không đủ quyền hoặc thông tin đặt hàng không hợp lệ.', 'error'); return; }
     const previous = pr.execution?.actualOrderedAmount || 0;
@@ -964,7 +963,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const releaseUncommittedRemainder = (prId: string, releaseAmount: number, reason: string) => {
     const pr = purchaseRequests.find(p => p.id === prId);
     const budget = budgetPools.find(b => b.id === pr?.budgetId);
-    if (!pr || !budget || !currentUser?.roles.includes('finance') || !canSeeBranch(currentUser,pr.branchId) || !reason.trim() ||
+    if (!pr || !budget || !canManageBudget(currentUser) || !canSeeBranch(currentUser,pr.branchId) || !reason.trim() ||
         !['APPROVED','IN_PROGRESS'].includes(pr.status)) {
       addToast('Chỉ Tài chính có thể xác nhận giải phóng phần không còn nghĩa vụ.', 'error'); return;
     }
@@ -984,7 +983,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // TO-BE 02: Kế toán đối soát & Nhập file
   // Import is a local preview; revalidates every row against recorded obligations.
   const importAccountingFile = (fileName: string, rows: AccountingImportRow[]) => {
-    if (!currentUser?.roles.some(role => ['accountant','finance'].includes(role))) {
+    if (!canReconcile(currentUser)) {
       addToast('Không có quyền nhập chứng từ kế toán.', 'error'); return '';
     }
     const knownInvoices = new Set(accountingBatches.filter(b => b.status === 'COMMITTED')
@@ -1027,11 +1026,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const commitAccountingBatch = (batchId: string) => {
-    if (!currentUser?.roles.some(r => ['accountant','finance'].includes(r))) {
+    if (!canReconcile(currentUser)) {
       addToast('Không có quyền xác nhận đối soát.', 'error'); return;
     }
     const batch = accountingBatches.find(b=>b.id === batchId);
-    if (!batch || batch.status !== 'PREVIEW') return;
+    if (!batch || batch.status !== 'PREVIEW' || batch.rows.some(r => r.validationStatus==='VALID' &&
+        !canSeeBranch(currentUser,purchaseRequests.find(p=>p.id===r.prId)?.branchId || ''))) {
+      addToast('Đợt nhập có hồ sơ ngoài phạm vi chi nhánh được giao.', 'error'); return;
+    }
     const validRows = batch.rows.filter(r=>r.validationStatus==='VALID');
     const byPR = new Map<string, number>();
     for (const row of validRows) byPR.set(row.prId, (byPR.get(row.prId) || 0) + row.amount);
@@ -1079,7 +1081,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): boolean => {
     const from = budgetPools.find((b) => b.id === fromBudgetId);
     const to = budgetPools.find((b) => b.id === toBudgetId);
-    if (!from || !to || fromBudgetId === toBudgetId || !isValidAmount(amount) || !reason.trim() || !currentUser?.roles.includes('finance') || !canSeeBranch(currentUser,from.branchId) || !canSeeBranch(currentUser,to.branchId)) return false;
+    if (!from || !to || fromBudgetId === toBudgetId || !isValidAmount(amount) || !reason.trim() || !canManageBudget(currentUser) || !canSeeBranch(currentUser,from.branchId) || !canSeeBranch(currentUser,to.branchId)) return false;
 
     const fromAvailable = from.allocated + (from.adjustments || 0) - from.held - from.committed - from.used;
     if (fromAvailable < amount) {
@@ -1121,7 +1123,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const approveBudgetTransfer = (transferId: string) => {
     const trf = transfers.find((t) => t.id === transferId);
-    if (!trf || trf.status !== 'PENDING_APPROVAL' || !currentUser?.roles.includes('bod')) return;
+    if (!trf || trf.status !== 'PENDING_APPROVAL' || primaryRole(currentUser)!=='bod') return;
     const fromPool = budgetPools.find(b => b.id === trf.fromBudgetId);
     const toPool = budgetPools.find(b => b.id === trf.toBudgetId);
     if (!fromPool || !toPool) return;
@@ -1174,7 +1176,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const rejectBudgetTransfer = (transferId: string, reason: string) => {
-    if (!currentUser?.roles.includes('bod') || !reason.trim()) { addToast('Cần quyền Ban Giám đốc và lý do từ chối.', 'error'); return; }
+    if (primaryRole(currentUser)!=='bod' || !reason.trim()) { addToast('Cần quyền Ban Giám đốc và lý do từ chối.', 'error'); return; }
     setTransfers((prev) =>
       prev.map((t) =>
         t.id === transferId
@@ -1251,9 +1253,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const createDelegation = (del: Omit<Delegation, 'id' | 'isActive'>) => {
-    if (!currentUser || (del.fromUserId !== currentUser.id && !currentUser.roles.includes('admin')) ||
+    if (!currentUser || !canManageUsers(currentUser) ||
         del.fromUserId === del.toUserId || !del.reason.trim() ||
-        !users.some(u=>u.id===del.toUserId && u.isActive)) {
+        !users.some(u=>u.id===del.toUserId && u.isActive && u.branchId===currentUser.branchId) ||
+        !users.some(u=>u.id===del.fromUserId && u.isActive && u.branchId===currentUser.branchId && u.roles.includes(del.role)) ||
+        !['dept_head','branch_director','finance'].includes(del.role)) {
       addToast('Thông tin hoặc quyền ủy quyền không hợp lệ.', 'error'); return;
     }
     const newDel: Delegation = {
@@ -1268,7 +1272,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const revokeDelegation = (delId: string) => {
     const del = delegations.find(d=>d.id===delId);
-    if (!del || (!currentUser?.roles.includes('admin') && del.fromUserId !== currentUser?.id)) {
+    if (!del || (!canManageUsers(currentUser) && del.fromUserId !== currentUser?.id)) {
       addToast('Không có quyền thu hồi ủy quyền.', 'error'); return;
     }
     setDelegations((prev) =>
@@ -1493,6 +1497,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetDemoData = () => {
+    if (!['bod','admin'].includes(primaryRole(currentUser)||'')) { addToast('Không có quyền khôi phục dữ liệu demo.', 'error'); return; }
     setUsers(INITIAL_USERS);
     setCurrentUser(null);
     setIsAuthenticated(false);
@@ -1519,19 +1524,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       selectedPrId,
       currentBranchScope,
       isSessionExpired,
-      users: !isAuthenticated ? users : (!isRequesterRole(currentUser) && currentUser?.roles.includes('admin'))
-        ? users.filter(u => u.branchId === currentUser.branchId) : users.filter(u => u.id === currentUser?.id),
-      budgetPools: isRequesterRole(currentUser)
-        ? permittedBudgetPools.map(b => ({ ...b, allocated: 0, adjustments: 0, held: 0, committed: 0, used: 0 }))
-        : permittedBudgetPools,
+      users: !isAuthenticated ? users : canManageUsers(currentUser)
+        ? users.filter(u => u.branchId === currentUser?.branchId) : users.filter(u => u.id === currentUser?.id),
+      budgetPools: permittedBudgetPools.map(b => canSeeFinancialFigures(currentUser) ? b :
+        { ...b, allocated:0, adjustments:0, held:0, committed:0, used:0 }),
       purchaseRequests: permittedPRs,
-      ledgerEntries: isRequesterRole(currentUser) ? [] : ledgerEntries.filter(x => permittedBudgetPools.some(b => b.id === x.budgetId)),
-      transfers: transfers.filter(t => !isRequesterRole(currentUser) && (currentUser?.roles.includes('finance') || currentUser?.roles.includes('bod')) &&
-        canSeeBranch(currentUser, budgetPools.find(b=>b.id === t.fromBudgetId)?.branchId || 'HQ')),
-      delegations: delegations.filter(d => currentUser?.roles.includes('admin') || d.fromUserId === currentUser?.id || d.toUserId === currentUser?.id),
-      notifications: isRequesterRole(currentUser) ? [] : notifications.filter(n => n.userId === currentUser?.id),
-      auditLogs: isRequesterRole(currentUser) ? [] : auditLogs.filter(a => currentUser?.roles.includes('admin') || (currentUser?.roles.includes('bod') && true) || (currentUser?.roles.includes('finance') && a.userId === currentUser.id)),
-      accountingBatches: !isRequesterRole(currentUser) && currentUser?.roles.some(r => ['accountant','finance','bod'].includes(r)) ? accountingBatches : [],
+      ledgerEntries: canSeeFinancialFigures(currentUser)
+        ? ledgerEntries.filter(x=>permittedBudgetPools.some(b=>b.id===x.budgetId)) : [],
+      transfers: ['finance','bod'].includes(primaryRole(currentUser)||'')
+        ? transfers.filter(t=>canSeeBranch(currentUser,budgetPools.find(b=>b.id===t.fromBudgetId)?.branchId||'')) : [],
+      delegations: canManageUsers(currentUser)
+        ? delegations.filter(d=>users.some(u=>u.id===d.fromUserId && u.branchId===currentUser?.branchId) &&
+          users.some(u=>u.id===d.toUserId && u.branchId===currentUser?.branchId))
+        : delegations.filter(d=>d.fromUserId===currentUser?.id || d.toUserId===currentUser?.id),
+      notifications: primaryRole(currentUser)==='requester' ? [] : notifications.filter(n=>n.userId===currentUser?.id),
+      auditLogs: canManageUsers(currentUser) ? auditLogs.filter(a=>users.some(u=>u.id===a.userId && u.branchId===currentUser?.branchId)) : [],
+      accountingBatches: primaryRole(currentUser)==='accountant'
+        ? accountingBatches.filter(batch=>batch.rows.some(r=>canSeeBranch(currentUser,
+            purchaseRequests.find(p=>p.id===r.prId)?.branchId||'')))
+          .map(batch => {const rows=batch.rows.filter(r=>canSeeBranch(currentUser,
+            purchaseRequests.find(p=>p.id===r.prId)?.branchId||''));return {...batch,rows,
+            totalRows:rows.length,validRows:rows.filter(r=>r.validationStatus==='VALID').length,
+            duplicateRows:rows.filter(r=>r.validationStatus==='DUPLICATE').length,
+            errorRows:rows.filter(r=>!['VALID','DUPLICATE'].includes(r.validationStatus)).length,
+            totalAmount:rows.filter(r=>r.validationStatus==='VALID').reduce((n,r)=>n+r.amount,0)};}) : [],
       toasts,
       addToast,
       dismissToast,

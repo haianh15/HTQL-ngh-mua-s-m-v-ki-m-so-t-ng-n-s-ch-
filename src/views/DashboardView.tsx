@@ -1,306 +1,180 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- * Procure UI — Dashboard View (UI-07, UC-QT04)
- * Màn hình Tổng quan mua sắm và ngân sách nội bộ
+ * Procure UI dashboard — separate financial-control and procurement workspaces.
+ * Dữ liệu được AppContext giới hạn theo chi nhánh/quyền trước khi render.
  */
-
 import React from 'react';
 import { useApp } from '../context/AppContext';
+import { canAccessScreen, canViewAllRegions, primaryRole } from '../domain/rules';
 import { formatVND, getPRStatusBadgeInfo } from '../utils/formatters';
 import { BudgetDistributionBar } from '../components/common/BudgetDistributionBar';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { Alert } from '../components/common/Alert';
-import { Plus, CheckSquare, ArrowRight, AlertTriangle, Clock, TrendingUp } from 'lucide-react';
+import { ArrowRight, CheckSquare, ShoppingBag, PieChart, AlertTriangle } from 'lucide-react';
+
+const card = 'bg-white border border-[#DDE0EA] rounded-[12px] p-5 shadow-[0_4px_20px_rgba(32,32,57,0.03)]';
+
+const SummaryCard: React.FC<{ label: string; value: string; note: string; emphasize?: boolean }> = ({ label, value, note, emphasize }) => (
+  <div className={card}>
+    <span className="text-xs text-[#62657A] font-medium block mb-1">{label}</span>
+    <strong className={`text-2xl block tabular-nums tracking-tight ${emphasize ? 'text-[#176B49]' : 'text-[#202039]'}`}>{value}</strong>
+    <span className="text-[11px] text-[#62657A] mt-2 block">{note}</span>
+  </div>
+);
 
 export const DashboardView: React.FC = () => {
-  const {
-    currentUser,
-    budgetPools,
-    purchaseRequests,
-    currentBranchScope,
-    navigateTo,
-  } = useApp();
+  const { currentUser, budgetPools, purchaseRequests, currentBranchScope, navigateTo } = useApp();
+  // Ưu tiên không gian Giám đốc nếu tài khoản được cấp quyền BOD.
+  const financeWorkspace = primaryRole(currentUser)==='finance';
+  const procurementWorkspace = primaryRole(currentUser)==='procurement';
+  const accountantWorkspace = primaryRole(currentUser)==='accountant';
+  const branchWorkspace = primaryRole(currentUser)==='branch_director';
+  const bodWorkspace = primaryRole(currentUser)==='bod';
+  const scopeAll = currentBranchScope === 'ALL' && canViewAllRegions(currentUser);
+  const scopedPRs = purchaseRequests.filter(pr => scopeAll || pr.branchId === currentBranchScope);
+  const scopedBudgets = budgetPools.filter(b => scopeAll || b.branchId === currentBranchScope);
+  const location = scopeAll ? 'Toàn công ty (HQ + 5 chi nhánh)' : currentBranchScope;
 
-  // Lọc theo phạm vi chi nhánh
-  const filteredBudgets = budgetPools.filter((b) =>
-    currentBranchScope === 'ALL' ? true : b.branchId === currentBranchScope
+  const activePurchasePRs = scopedPRs.filter(pr =>
+    ['APPROVED', 'IN_PROGRESS', 'COMPLETED'].includes(pr.status) ||
+    (pr.effectiveVersion > 0 && pr.versions.some(v => v.versionNumber === pr.effectiveVersion && v.isEffective))
   );
+  const awaitingReceipt = activePurchasePRs.filter(pr => pr.status !== 'COMPLETED' && !pr.execution?.receivedAt);
+  const inProgress = activePurchasePRs.filter(pr => pr.status !== 'COMPLETED' && !!pr.execution?.receivedAt);
+  const finished = activePurchasePRs.filter(pr => pr.status === 'COMPLETED');
+  const ordered = activePurchasePRs.filter(pr => (pr.execution?.actualOrderedAmount || 0) > 0);
 
-  const filteredPRs = purchaseRequests.filter((pr) =>
-    currentBranchScope === 'ALL' ? true : pr.branchId === currentBranchScope
-  );
+  const allocated = scopedBudgets.reduce((s,b) => s + b.allocated + (b.adjustments || 0), 0);
+  const held = scopedBudgets.reduce((s,b) => s + b.held, 0);
+  const committed = scopedBudgets.reduce((s,b) => s + b.committed, 0);
+  const used = scopedBudgets.reduce((s,b) => s + b.used, 0);
+  const available = allocated - held - committed - used;
+  const pendingFinance = scopedPRs.filter(pr => pr.status === 'PENDING_FINANCE' && pr.createdById !== currentUser?.id);
+  const waitingFunds = scopedPRs.filter(pr => pr.status === 'WAITING_FUNDS');
 
-  // Tổng hợp chỉ số tài chính (công thức BRD)
-  const totalAllocated = filteredBudgets.reduce(
-    (s, b) => s + b.allocated + (b.adjustments || 0),
-    0
-  );
-  const totalHeld = filteredBudgets.reduce((s, b) => s + b.held, 0);
-  const totalCommitted = filteredBudgets.reduce((s, b) => s + b.committed, 0);
-  const totalUsed = filteredBudgets.reduce((s, b) => s + b.used, 0);
-  const totalAvailable = Math.max(0, totalAllocated - totalHeld - totalCommitted - totalUsed);
+  if (procurementWorkspace) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-[16px] p-6 sm:p-8 bg-[#F0EDFF] border border-[#DED7FA]">
+          <div className="text-xs uppercase font-bold tracking-wide text-[#5540C7]">Bộ phận Mua hàng · {location}</div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#202039] mt-2">Tổng quan mua hàng</h1>
+          <p className="text-sm text-[#62657A] my-3">Theo dõi hồ sơ đã phê duyệt, tiếp nhận thực hiện và ghi nhận đơn đặt hàng. Không quản lý hạn mức hay điều chuyển ngân sách.</p>
+          <Button variant="primary" onClick={() => navigateTo('EXECUTION_LIST')} icon={<ShoppingBag className="w-4 h-4" />}>Tiếp nhận & thực hiện mua sắm</Button>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <SummaryCard label="Chờ Mua hàng tiếp nhận" value={String(awaitingReceipt.length)} note="Đề nghị có bản duyệt hiệu lực" />
+          <SummaryCard label="Đang thực hiện" value={String(inProgress.length)} note="Hồ sơ đã tiếp nhận, chưa hoàn tất" />
+          <SummaryCard label="Đã ghi nhận đặt hàng" value={String(ordered.length)} note="Hồ sơ có thông tin PO/cam kết" />
+          <SummaryCard label="Đã hoàn tất" value={String(finished.length)} note="Hồ sơ hoàn thành đối soát" emphasize />
+        </div>
+        <div className={`${card} overflow-hidden !p-0`}>
+          <div className="p-5 flex flex-wrap items-center justify-between gap-2 border-b border-[#DDE0EA]">
+            <div>
+              <h2 className="font-bold text-[#202039]">Hồ sơ mua hàng cần theo dõi</h2>
+              <p className="text-xs text-[#62657A]">Chỉ các đề nghị đã được duyệt trong khu vực được phân công</p>
+            </div>
+            <button className="text-xs font-semibold text-[#5540C7] flex items-center gap-1" onClick={() => navigateTo('EXECUTION_LIST')}>Xem tất cả <ArrowRight className="w-4 h-4" /></button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm"><thead className="bg-[#F7F8FC] text-[#62657A] text-xs"><tr>
+              <th className="p-3">Mã đề nghị</th><th className="p-3">Nội dung</th><th className="p-3">Đơn vị</th><th className="p-3">Nhà cung cấp / PO</th><th className="p-3">Tiến độ</th>
+            </tr></thead><tbody className="divide-y divide-[#DDE0EA]">
+              {activePurchasePRs.filter(pr => pr.status !== 'COMPLETED').slice(0, 6).map(pr => (
+                <tr key={pr.id}>
+                  <td className="p-3 font-semibold text-[#5540C7]">{pr.id}</td>
+                  <td className="p-3 max-w-[240px] truncate">{pr.title}</td>
+                  <td className="p-3 text-xs">{pr.departmentName}</td>
+                  <td className="p-3 text-xs">{pr.execution?.supplierName || 'Chưa chọn'}<div className="text-[#62657A]">{pr.execution?.poReference || 'Chưa có PO'}</div></td>
+                  <td className="p-3"><Badge variant={pr.execution?.actualOrderedAmount ? 'purple' : pr.execution?.receivedAt ? 'blue' : 'neutral'}>{pr.execution?.actualOrderedAmount ? 'Đã ghi nhận PO' : pr.execution?.receivedAt ? 'Đã tiếp nhận' : 'Chờ tiếp nhận'}</Badge></td>
+                </tr>
+              ))}
+              {activePurchasePRs.filter(pr => pr.status !== 'COMPLETED').length === 0 && <tr><td colSpan={5} className="p-8 text-center text-[#62657A]">Không có hồ sơ đang chờ xử lý.</td></tr>}
+            </tbody></table>
+          </div>
+        </div>
+        <Button variant="secondary" onClick={() => navigateTo('REPORTS')}>Xem báo cáo tiến độ mua hàng</Button>
+      </div>
+    );
+  }
 
-  // Đề nghị cần tôi duyệt
-  const pendingForMe = filteredPRs.filter((pr) => {
-    if (['APPROVED', 'REJECTED', 'CANCELLED', 'DRAFT', 'COMPLETED'].includes(pr.status)) {
-      return false;
-    }
-    const currentStep = pr.approvalTimeline[pr.currentStepIndex];
-    if (!currentStep) return false;
-    // Kiểm tra vai trò và chặn người tạo không tự duyệt
-    const isMyRole = currentUser?.roles.includes(currentStep.assignedRole);
-    const isNotCreator = pr.createdById !== currentUser?.id;
-    return isMyRole && isNotCreator;
-  });
+  if (accountantWorkspace) {
+    const pendingReconciliation = activePurchasePRs.filter(pr =>
+      (pr.execution?.actualOrderedAmount || 0) > (pr.execution?.actualRecordedAmount || 0));
+    return <div className="space-y-6">
+      <div className="rounded-[16px] p-6 sm:p-8 bg-[#F0EDFF] border border-[#DED7FA]">
+        <div className="text-xs uppercase font-bold tracking-wide text-[#5540C7]">Kế toán – Đối soát · {location}</div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#202039] mt-2">Tổng quan kế toán</h1>
+        <p className="text-sm text-[#62657A] my-3">Theo dõi hóa đơn, cam kết chưa ghi nhận và khoản chi đã đối soát; không điều chuyển ngân sách hay đặt hàng.</p>
+        <Button variant="primary" onClick={()=>navigateTo('RECONCILIATION_IMPORT')}>Nhập chứng từ &amp; đối soát</Button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <SummaryCard label="Cam kết chưa ghi nhận" value={formatVND(committed)} note="Đang chờ chứng từ hợp lệ" />
+        <SummaryCard label="Đã ghi nhận chi phí" value={formatVND(used)} note="Chi phí sau đối soát" emphasize />
+        <SummaryCard label="Hồ sơ chờ đối soát" value={String(pendingReconciliation.length)} note="Có PO, còn dư cam kết" />
+        <SummaryCard label="Hồ sơ hoàn tất" value={String(finished.length)} note="Đã hoàn thành ghi nhận" />
+      </div>
+      <div className={card}>
+        <div className="flex justify-between gap-3 items-center mb-4"><h2 className="font-bold text-[#202039]">Hồ sơ cần đối soát</h2>
+          <button onClick={()=>navigateTo('RECONCILIATION_IMPORT')} className="text-xs text-[#5540C7] font-semibold">Mở đối soát</button></div>
+        {pendingReconciliation.slice(0,8).map(pr=><div key={pr.id} className="flex justify-between gap-4 py-3 border-b border-[#DDE0EA] text-sm">
+          <div><strong>{pr.id}</strong><div className="text-xs text-[#62657A]">{pr.title}</div></div>
+          <strong className="tabular-nums">{formatVND((pr.execution?.actualOrderedAmount||0)-(pr.execution?.actualRecordedAmount||0))}</strong>
+        </div>)}
+        {pendingReconciliation.length===0 && <p className="text-sm text-[#62657A]">Không có hồ sơ chờ đối soát.</p>}
+      </div>
+    </div>;
+  }
 
-  const waitingFundsCount = filteredPRs.filter((pr) => pr.status === 'WAITING_FUNDS').length;
-
+  // Finance receives a budget-focused workspace; BOD/branch director see a scoped
+  // financial overview as well, but their full-company scope is controlled above.
   return (
     <div className="space-y-6">
-      {/* Hero Welcome & Scope Banner */}
-      <div className="bg-[#EEEAFB] border border-[#DED7FA] p-6 sm:p-8 rounded-[16px] text-[#202039]">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <span className="text-[11px] font-bold tracking-[1.8px] uppercase text-[#5540C7]">
-            Procurement & Budget Control System
-          </span>
-          <span className="px-3 py-1 bg-white text-[#5540C7] rounded-full text-xs font-semibold shadow-xs">
-            Phạm vi:{' '}
-            {currentBranchScope === 'ALL' ? 'Toàn công ty (01 HQ + 05 Chi nhánh)' : currentBranchScope}
-          </span>
-        </div>
-
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#202039] mb-2">
-          Mua sắm minh bạch. Ngân sách trong tầm kiểm soát.
-        </h1>
-        <p className="max-w-2xl text-sm text-[#4E4868] mb-6">
-          Xin chào <strong>{currentUser?.name}</strong> ({currentUser?.title}). Bạn đang quản lý các đề nghị mua sắm và luồng ngân sách thuộc {currentUser?.departmentName}.
-        </p>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            variant="primary"
-            onClick={() => navigateTo('PR_CREATE')}
-            icon={<Plus className="w-4 h-4" />}
-          >
-            Tạo đề nghị mua sắm mới
-          </Button>
-          {pendingForMe.length > 0 && (
-            <Button
-              variant="secondary"
-              onClick={() => navigateTo('APPROVAL_QUEUE')}
-              icon={<CheckSquare className="w-4 h-4 text-[#5540C7]" />}
-            >
-              Hàng chờ duyệt ({pendingForMe.length} hồ sơ)
-            </Button>
-          )}
+      <div className="rounded-[16px] p-6 sm:p-8 bg-[#F0EDFF] border border-[#DED7FA]">
+        <div className="text-xs uppercase font-bold tracking-wide text-[#5540C7]">{financeWorkspace ? 'Tài chính – Ngân sách' : branchWorkspace ? 'Giám đốc chi nhánh' : bodWorkspace ? 'Ban Giám đốc công ty' : 'Tổng quan điều hành'} · {location}</div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#202039] mt-2">{financeWorkspace ? 'Tổng quan ngân sách' : branchWorkspace ? 'Tổng quan chi nhánh' : 'Tổng quan toàn công ty'}</h1>
+        <p className="text-sm text-[#62657A] my-3">{financeWorkspace ? 'Kiểm tra nguồn, theo dõi hạn mức, số đang giữ, cam kết và số đã sử dụng tại khu vực được giao.' : `Tổng hợp hoạt động theo phạm vi được cấp của ${currentUser?.name || 'tài khoản'}.`}</p>
+        <div className="flex flex-wrap gap-2">
+          {canAccessScreen(currentUser, 'APPROVAL_QUEUE') && <Button variant="primary" onClick={() => navigateTo('APPROVAL_QUEUE')} icon={<CheckSquare className="w-4 h-4" />}>Kiểm tra đề nghị ({pendingFinance.length})</Button>}
+          {canAccessScreen(currentUser, 'BUDGET_OVERVIEW') && <Button variant="secondary" onClick={() => navigateTo('BUDGET_OVERVIEW')} icon={<PieChart className="w-4 h-4" />}>Quản lý ngân sách</Button>}
+          {canAccessScreen(currentUser, 'REPORTS') && <Button variant="secondary" onClick={() => navigateTo('REPORTS')}>Báo cáo</Button>}
         </div>
       </div>
-
-      {/* Cảnh báo hành động */}
-      {waitingFundsCount > 0 && (
-        <Alert variant="amber">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-[#875000] flex-shrink-0" />
-              <span>
-                Có <strong>{waitingFundsCount}</strong> hồ sơ đang ở trạng thái <strong>Chờ nguồn</strong> do ngân sách khả dụng không đủ để giữ an toàn.
-              </span>
-            </div>
-            <button
-              onClick={() => navigateTo('BUDGET_OVERVIEW')}
-              className="text-xs font-bold text-[#875000] underline"
-            >
-              Xem xét điều chuyển nguồn →
-            </button>
-          </div>
-        </Alert>
-      )}
-
-      {/* 4 Financial Metric Cards (Chuẩn Design System v1.0) */}
+      {waitingFunds.length > 0 && <Alert variant="amber"><span className="flex items-center gap-2"><AlertTriangle className="w-4 h-4" />Có {waitingFunds.length} đề nghị đang chờ bổ sung nguồn ngân sách.</span></Alert>}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Cấp hạn mức */}
-        <div className="bg-white border border-[#DDE0EA] rounded-[12px] p-5 shadow-[0_4px_20px_rgba(32,32,57,0.03)]">
-          <span className="text-xs text-[#62657A] font-medium block mb-1">Ngân sách được cấp</span>
-          <div className="text-2xl font-bold text-[#202039] tabular-nums tracking-tight">
-            {formatVND(totalAllocated)}
-          </div>
-          <span className="text-[11px] text-[#62657A] mt-2 block">
-            Q4/2026 · Hạn mức đã duyệt
-          </span>
-        </div>
-
-        {/* Đã chi */}
-        <div className="bg-white border border-[#DDE0EA] rounded-[12px] p-5 shadow-[0_4px_20px_rgba(32,32,57,0.03)]">
-          <span className="text-xs text-[#62657A] font-medium block mb-1">Đã sử dụng (Thực chi)</span>
-          <div className="text-2xl font-bold text-[#202039] tabular-nums tracking-tight">
-            {formatVND(totalUsed)}
-          </div>
-          <span className="text-[11px] text-[#62657A] mt-2 block">
-            {totalAllocated > 0 ? ((totalUsed / totalAllocated) * 100).toFixed(0) : 0}% tổng hạn mức
-          </span>
-        </div>
-
-        {/* Cam kết + Giữ chỗ */}
-        <div className="bg-white border border-[#DDE0EA] rounded-[12px] p-5 shadow-[0_4px_20px_rgba(32,32,57,0.03)]">
-          <span className="text-xs text-[#62657A] font-medium block mb-1">Cam kết + Giữ chỗ</span>
-          <div className="text-2xl font-bold text-[#202039] tabular-nums tracking-tight">
-            {formatVND(totalCommitted + totalHeld)}
-          </div>
-          <span className="text-[11px] text-[#62657A] mt-2 block">
-            {formatVND(totalCommitted)} cam kết + {formatVND(totalHeld)} đang giữ
-          </span>
-        </div>
-
-        {/* Khả dụng */}
-        <div className="bg-white border border-[#DDE0EA] rounded-[12px] p-5 shadow-[0_4px_20px_rgba(32,32,57,0.03)]">
-          <span className="text-xs text-[#62657A] font-medium block mb-1">Còn khả dụng an toàn</span>
-          <div className="text-2xl font-bold text-[#176B49] tabular-nums tracking-tight">
-            {formatVND(totalAvailable)}
-          </div>
-          <span className="text-[11px] text-[#176B49] font-medium mt-2 block">
-            {totalAllocated > 0 ? ((totalAvailable / totalAllocated) * 100).toFixed(0) : 0}% khả dụng cho đề nghị mới
-          </span>
-        </div>
+        <SummaryCard label="Tổng hạn mức" value={formatVND(allocated)} note="Phân bổ + điều chỉnh ròng" />
+        <SummaryCard label="Đang giữ" value={formatVND(held)} note="Đề nghị đã duyệt, chưa cam kết" />
+        <SummaryCard label="Cam kết & đã dùng" value={formatVND(committed + used)} note={`${formatVND(committed)} cam kết · ${formatVND(used)} đã dùng`} />
+        <SummaryCard label="Khả dụng" value={formatVND(available)} note="Hạn mức − giữ − cam kết − đã sử dụng" emphasize />
       </div>
-
-      {/* Phân bổ sử dụng ngân sách Bar */}
-      <div className="bg-white border border-[#DDE0EA] rounded-[12px] p-6 shadow-[0_4px_20px_rgba(32,32,57,0.03)]">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-base font-bold text-[#202039] m-0">
-            Phân bổ sử dụng ngân sách (Non-overlapping Allocation)
-          </h3>
-          <Badge variant={totalAvailable > 0 ? 'green' : 'red'}>
-            {totalAvailable > 0 ? 'Trong hạn mức kiểm soát' : 'Cảnh báo hết khả dụng'}
-          </Badge>
-        </div>
-
-        <BudgetDistributionBar
-          allocated={totalAllocated}
-          held={totalHeld}
-          committed={totalCommitted}
-          used={totalUsed}
-          className="mt-3"
-        />
+      <div className={card}>
+        <h2 className="font-bold text-[#202039] mb-3">Cơ cấu sử dụng ngân sách</h2>
+        <BudgetDistributionBar allocated={allocated} held={held} committed={committed} used={used} />
       </div>
-
-      {/* Grid: Đề nghị gần đây & Nguồn ngân sách trọng điểm */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Table: Đề nghị gần đây (2 cột) */}
-        <div className="lg:col-span-2 bg-white border border-[#DDE0EA] rounded-[12px] shadow-[0_4px_20px_rgba(32,32,57,0.03)] overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#DDE0EA]">
-            <div>
-              <h3 className="text-base font-bold text-[#202039] m-0">Đề nghị mua sắm gần đây</h3>
-              <p className="text-xs text-[#62657A] m-0">Hiển thị các hồ sơ mới nhất trong phạm vi</p>
-            </div>
-            <button
-              onClick={() => navigateTo('PR_LIST')}
-              className="text-xs font-semibold text-[#5540C7] hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              <span>Xem tất cả ({filteredPRs.length})</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className={card}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-[#202039]">Nguồn ngân sách khu vực</h2>
+            {canAccessScreen(currentUser, 'BUDGET_OVERVIEW') && <button className="text-xs text-[#5540C7] font-semibold" onClick={() => navigateTo('BUDGET_OVERVIEW')}>Xem chi tiết</button>}
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#F7F8FC] border-b border-[#DDE0EA] text-xs font-semibold text-[#62657A]">
-                  <th className="py-3 px-4">Mã & Tên đề nghị</th>
-                  <th className="py-3 px-4">Đơn vị</th>
-                  <th className="py-3 px-4 text-right">Số tiền (VND)</th>
-                  <th className="py-3 px-4">Trạng thái</th>
-                  <th className="py-3 px-4">Ngày tạo</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#DDE0EA] text-sm">
-                {filteredPRs.slice(0, 5).map((pr) => {
-                  const badge = getPRStatusBadgeInfo(pr.status);
-                  return (
-                    <tr
-                      key={pr.id}
-                      onClick={() => navigateTo('PR_DETAIL', pr.id)}
-                      className="hover:bg-[#FAFAFE] cursor-pointer transition-colors"
-                    >
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-[#5540C7] hover:underline">
-                          {pr.id}
-                        </div>
-                        <div className="text-xs text-[#62657A] max-w-[260px] truncate">
-                          {pr.title}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-xs text-[#202039]">{pr.departmentName}</td>
-                      <td className="py-3 px-4 text-right font-medium tabular-nums whitespace-nowrap">
-                        {formatVND(pr.totalAmount)}
-                      </td>
-                      <td className="py-3 px-4">
-                        <Badge variant={badge.badgeClass}>{badge.label}</Badge>
-                      </td>
-                      <td className="py-3 px-4 text-xs text-[#62657A] whitespace-nowrap">
-                        {pr.createdAt.split(' ')[0]}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="space-y-3">
+            {scopedBudgets.slice(0, 5).map(b => <div key={b.id} className="flex justify-between gap-2 py-2 border-b border-[#DDE0EA] text-xs">
+              <div><strong className="text-[#202039]">{b.name}</strong><div className="text-[#62657A]">{b.departmentName}</div></div>
+              <span className="font-semibold tabular-nums text-[#176B49]">{formatVND(b.allocated + (b.adjustments || 0) - b.held - b.committed - b.used)}</span>
+            </div>)}
+            {scopedBudgets.length === 0 && <p className="text-sm text-[#62657A]">Không có nguồn ngân sách trong phạm vi được cấp.</p>}
           </div>
         </div>
-
-        {/* Nguồn ngân sách trọng điểm (1 cột) */}
-        <div className="bg-white border border-[#DDE0EA] rounded-[12px] p-5 shadow-[0_4px_20px_rgba(32,32,57,0.03)] space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-[#202039] m-0">Nguồn ngân sách</h3>
-            <button
-              onClick={() => navigateTo('BUDGET_OVERVIEW')}
-              className="text-xs font-semibold text-[#5540C7] hover:underline"
-            >
-              Chi tiết
-            </button>
-          </div>
-
-          <div className="space-y-3.5">
-            {filteredBudgets.slice(0, 3).map((bg) => {
-              const limit = bg.allocated + (bg.adjustments || 0);
-              const avail = Math.max(0, limit - bg.held - bg.committed - bg.used);
-              const availPct = limit > 0 ? (avail / limit) * 100 : 0;
-              return (
-                <div
-                  key={bg.id}
-                  className="p-3 rounded-[10px] bg-[#F7F8FC] border border-[#DDE0EA]/60 hover:border-[#5540C7] transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <div className="font-semibold text-xs text-[#202039] leading-tight">
-                      {bg.name}
-                    </div>
-                    <span
-                      className={`text-[11px] font-bold ${
-                        availPct < 15 ? 'text-[#875000]' : 'text-[#176B49]'
-                      }`}
-                    >
-                      {availPct.toFixed(0)}% còn lại
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-[#62657A]">
-                    <span>Khả dụng:</span>
-                    <strong className="text-[#202039] tabular-nums">{formatVND(avail)}</strong>
-                  </div>
-                </div>
-              );
+        <div className={card}>
+          <h2 className="font-bold text-[#202039] mb-3">Đề nghị cần kiểm soát nguồn</h2>
+          <div className="space-y-3">
+            {scopedPRs.filter(pr => ['PENDING_FINANCE','WAITING_FUNDS'].includes(pr.status)).slice(0,5).map(pr => {
+              const state = getPRStatusBadgeInfo(pr.status);
+              return <div className="flex items-center justify-between gap-3 text-xs py-2 border-b border-[#DDE0EA]" key={pr.id}>
+                <div><strong className="text-[#5540C7]">{pr.id}</strong><div className="text-[#62657A] max-w-[220px] truncate">{pr.title}</div></div>
+                <Badge variant={state.badgeClass}>{state.label}</Badge>
+              </div>;
             })}
-          </div>
-
-          <div className="pt-2">
-            <Button
-              variant="secondary"
-              size="small"
-              className="w-full"
-              onClick={() => navigateTo('BUDGET_OVERVIEW')}
-            >
-              Xem báo cáo & Bút toán ngân sách
-            </Button>
+            {scopedPRs.every(pr => !['PENDING_FINANCE','WAITING_FUNDS'].includes(pr.status)) && <p className="text-sm text-[#62657A]">Chưa có hồ sơ cần kiểm tra nguồn.</p>}
           </div>
         </div>
       </div>

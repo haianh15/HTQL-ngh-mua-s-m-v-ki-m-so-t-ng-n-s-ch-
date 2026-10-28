@@ -38,19 +38,14 @@ export function eligibleDelegation(user: User, pr: PurchaseRequest, role: string
     (!d.maxAmountLimit || pr.totalAmount <= d.maxAmountLimit));
 }
 export function canApproveStep(user: User | null, pr: PurchaseRequest, ds: Delegation[]): boolean {
-  if (!user || !user.isActive || isRequesterRole(user) || user.id === pr.createdById) return false;
+  if (!user || !canAccessScreen(user,'APPROVAL_QUEUE') || !canSeeBranch(user,pr.branchId) || user.id === pr.createdById) return false;
   if (!['PENDING_DEPT','PENDING_FINANCE','PENDING_FINAL'].includes(pr.status)) return false;
   const step = pr.approvalTimeline[pr.currentStepIndex];
   if (!step || step.status !== 'PENDING') return false;
-  const direct = user.roles.includes(step.assignedRole) &&
-    (user.branchId === pr.branchId || user.roles.includes('bod')) &&
+  const direct = primaryRole(user) === step.assignedRole &&
+    canSeeBranch(user,pr.branchId) &&
     (step.assignedRole !== 'dept_head' || user.departmentId === pr.departmentId);
   return direct || eligibleDelegation(user, pr, step.assignedRole, ds);
-}
-export function canSeeBranch(user: User | null, branchId: string): boolean {
-  if (!user || !user.isActive) return false;
-  if (!isRequesterRole(user) && user.roles.includes('bod')) return true;
-  return user.branchId === branchId;
 }
 export function reserveBudget(budget: BudgetPool, amount: number): BudgetPool {
   if (!isValidAmount(amount) || availableBudget(budget) < amount) throw new Error('Không đủ ngân sách khả dụng.');
@@ -81,66 +76,74 @@ export function transferBudget(from: BudgetPool, to: BudgetPool, amount: number)
   ];
 }
 
-// Vai trò requester là tài khoản nhân viên tối thiểu: không kế thừa quyền
-// Dashboard/Báo cáo từ vai trò cũ lưu trong dữ liệu demo hoặc từ cấu hình trùng vai trò.
-// Backend thật phải dùng cùng chính sách deny-by-default.
-export function isRequesterRole(user: User | null): boolean {
-  return !!user?.isActive && user.roles.includes('requester');
+// Một không gian tác nghiệp chính cho mỗi phiên. Deny-by-default cho tài khoản
+// bị trùng vai trò; requester/admin không được kế thừa quyền tài chính do dữ liệu demo cũ.
+export type ActorRole = User['roles'][number];
+export function primaryRole(user: User | null): ActorRole | null {
+  if (!user?.isActive || !Array.isArray(user.roles) || !user.roles.length) return null;
+  if (user.roles.includes('requester')) return 'requester';
+  if (user.roles.includes('admin')) return 'admin';
+  for (const r of ['bod','branch_director','finance','procurement','accountant','dept_head'] as ActorRole[])
+    if (user.roles.includes(r)) return r;
+  return null;
 }
-
-// Các quyền hiển thị là quy định tách biệt với bước phê duyệt nghiệp vụ.
-// Chỉ BOD/Tổng Giám đốc được xem toàn bộ HQ và năm chi nhánh.
-export function canViewAllRegions(user: User | null): boolean {
-  return !!user?.isActive && !isRequesterRole(user) && user.roles.includes('bod');
+export function isRequesterRole(user: User | null): boolean { return primaryRole(user) === 'requester'; }
+export function canViewAllRegions(user: User | null): boolean { return primaryRole(user) === 'bod'; }
+export function canSeeBranch(user: User | null, branchId: string): boolean {
+  return !!branchId && (primaryRole(user)==='bod' || (!!primaryRole(user) && user!.branchId===branchId));
 }
 export function canViewDashboard(user: User | null): boolean {
-  return !!user?.isActive && !isRequesterRole(user) && user.roles.some(r =>
-    ['bod', 'branch_director', 'finance', 'procurement', 'accountant'].includes(r)
-  );
+  return ['bod','branch_director','finance','procurement','accountant'].includes(primaryRole(user) || '');
+}
+export function canSeeFinancialFigures(user: User | null): boolean {
+  return ['bod','branch_director','finance','accountant'].includes(primaryRole(user) || '');
+}
+export function canReadBudget(user: User | null, budget: BudgetPool): boolean {
+  return canSeeFinancialFigures(user) && canSeeBranch(user,budget.branchId);
 }
 export function canReadRequest(user: User | null, pr: PurchaseRequest): boolean {
-  if (!user?.isActive) return false;
-  // Ưu tiên quyền sở hữu: nhân viên chỉ đọc hồ sơ do chính tài khoản này tạo,
-  // kể cả khi sau này người đó được điều chuyển sang đơn vị khác.
-  if (isRequesterRole(user)) return pr.createdById === user.id;
-  if (!canSeeBranch(user, pr.branchId)) return false;
-  if (user.roles.includes('bod')) return true;
-  if (user.roles.includes('branch_director')) return true; // Chỉ chi nhánh được giao
-  if (user.roles.some(r => ['finance', 'procurement', 'accountant'].includes(r))) return true;
-  if (user.roles.includes('dept_head')) return pr.departmentId === user.departmentId || pr.createdById === user.id;
-  if (user.roles.includes('requester')) return pr.createdById === user.id;
-  return false; // admin không được tự động đọc hồ sơ của nhân viên
+  const role=primaryRole(user);
+  if (!role || role==='admin') return false;
+  if (role==='requester') return pr.createdById === user!.id;
+  // Bản nháp là dữ liệu riêng tư, không hiển thị cho trưởng phòng, tài chính hay lãnh đạo.
+  if (pr.status==='DRAFT' && pr.createdById!==user!.id) return false;
+  if (!canSeeBranch(user,pr.branchId)) return false;
+  if (role==='dept_head') return pr.departmentId === user!.departmentId;
+  // Mua hàng và kế toán chỉ cần xử lý các hồ sơ đã được duyệt; không xem bản nháp hoặc đơn đang chờ duyệt.
+  if (role==='procurement' || role==='accountant')
+    return ['APPROVED','IN_PROGRESS','COMPLETED'].includes(pr.status) ||
+      (pr.versions||[]).some(v=>v.isEffective && v.versionNumber===pr.effectiveVersion && pr.status!=='CANCELLED');
+  if (role==='finance' || role==='branch_director' || role==='bod')
+    return pr.status !== 'DRAFT' || pr.createdById === user!.id;
+  return false;
 }
+export function canManageBudget(user:User|null):boolean {return primaryRole(user)==='finance';}
+export function canExecutePurchase(user:User|null):boolean {return primaryRole(user)==='procurement';}
+export function canReconcile(user:User|null):boolean {return primaryRole(user)==='accountant';}
+export function canManageUsers(user:User|null):boolean {return primaryRole(user)==='admin';}
 export type ProtectedScreen =
   | 'DASHBOARD' | 'PR_LIST' | 'PR_CREATE' | 'PR_EDIT' | 'PR_DETAIL'
   | 'APPROVAL_QUEUE' | 'EXECUTION_LIST' | 'BUDGET_OVERVIEW' | 'BUDGET_TRANSFERS'
   | 'BUDGET_WAITING_PR' | 'RECONCILIATION_IMPORT' | 'REPORTS' | 'NOTIFICATIONS'
   | 'ADMIN_MANAGEMENT' | 'FORBIDDEN_403' | 'AUTH_LOGIN' | 'AUTH_MFA' | 'AUTH_FORGOT_PW';
-export function canAccessScreen(user: User | null, screen: ProtectedScreen): boolean {
-  if (!user?.isActive) return false;
-  // Nhân viên: chỉ xem/lập và cập nhật đề nghị CỦA CHÍNH MÌNH.
-  // PR_DETAIL và PR_EDIT là màn hình con; quyền truy cập hồ sơ được kiểm tra riêng.
-  if (isRequesterRole(user)) return [
-    'PR_LIST', 'PR_CREATE', 'PR_EDIT', 'PR_DETAIL', 'FORBIDDEN_403',
-  ].includes(screen);
-  if (screen === 'FORBIDDEN_403' || screen === 'NOTIFICATIONS') return true;
-  if (screen === 'ADMIN_MANAGEMENT') return user.roles.includes('admin');
-  if (screen === 'DASHBOARD') return canViewDashboard(user);
-  if (['BUDGET_OVERVIEW', 'BUDGET_TRANSFERS', 'BUDGET_WAITING_PR'].includes(screen))
-    return user.roles.some(r => ['bod', 'finance'].includes(r));
-  if (screen === 'REPORTS') return user.roles.some(r => ['bod', 'finance', 'accountant', 'procurement', 'branch_director'].includes(r));
-  if (screen === 'EXECUTION_LIST') return user.roles.some(r => ['procurement', 'finance', 'bod'].includes(r));
-  if (screen === 'RECONCILIATION_IMPORT') return user.roles.some(r => ['accountant', 'finance', 'bod'].includes(r));
-  if (screen === 'APPROVAL_QUEUE') return user.roles.some(r => ['dept_head', 'branch_director', 'finance', 'bod'].includes(r));
-  if (['PR_LIST', 'PR_DETAIL'].includes(screen)) return !user.roles.every(r => r === 'admin');
-  if (['PR_CREATE', 'PR_EDIT'].includes(screen)) return user.roles.some(r =>
-    ['requester', 'dept_head', 'branch_director', 'finance', 'procurement', 'accountant', 'bod'].includes(r)
-  );
-  return false;
+// Quyền màn hình là nguồn duy nhất cho sidebar, router và các thao tác.
+const ROLE_SCREENS: Record<ActorRole, readonly ProtectedScreen[]> = {
+  requester:['PR_LIST','PR_CREATE','PR_EDIT','PR_DETAIL'],
+  dept_head:['PR_LIST','PR_DETAIL','APPROVAL_QUEUE','NOTIFICATIONS'],
+  finance:['DASHBOARD','PR_LIST','PR_DETAIL','APPROVAL_QUEUE','BUDGET_OVERVIEW','BUDGET_TRANSFERS','BUDGET_WAITING_PR','REPORTS','NOTIFICATIONS'],
+  procurement:['DASHBOARD','PR_LIST','PR_DETAIL','EXECUTION_LIST','REPORTS','NOTIFICATIONS'],
+  accountant:['DASHBOARD','PR_LIST','PR_DETAIL','RECONCILIATION_IMPORT','REPORTS','NOTIFICATIONS'],
+  branch_director:['DASHBOARD','PR_LIST','PR_DETAIL','APPROVAL_QUEUE','REPORTS','NOTIFICATIONS'],
+  bod:['DASHBOARD','PR_LIST','PR_DETAIL','APPROVAL_QUEUE','BUDGET_OVERVIEW','BUDGET_TRANSFERS','BUDGET_WAITING_PR','REPORTS','NOTIFICATIONS'],
+  admin:['ADMIN_MANAGEMENT'],
+};
+export function canAccessScreen(user: User|null, screen:ProtectedScreen):boolean {
+  const role=primaryRole(user);
+  return !!role && (screen==='FORBIDDEN_403' || ROLE_SCREENS[role].includes(screen));
 }
-export function defaultScreenFor(user: User): ProtectedScreen {
-  if (isRequesterRole(user)) return 'PR_LIST';
-  if (user.roles.includes('admin') && user.roles.length === 1) return 'ADMIN_MANAGEMENT';
-  if (user.roles.includes('dept_head') && !user.roles.some(r => ['bod','branch_director','finance'].includes(r))) return 'APPROVAL_QUEUE';
-  return canViewDashboard(user) ? 'DASHBOARD' : 'PR_LIST';
+export function defaultScreenFor(user:User):ProtectedScreen {
+  const role=primaryRole(user);
+  if (role==='requester' || role==='dept_head') return role==='requester'?'PR_LIST':'APPROVAL_QUEUE';
+  if (role==='admin') return 'ADMIN_MANAGEMENT';
+  return canViewDashboard(user)?'DASHBOARD':'FORBIDDEN_403';
 }
