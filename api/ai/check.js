@@ -7,7 +7,9 @@ export default withAuth(async(req,res,identity)=>{
   requirePost(req);if(identity.role==='admin')deny();
   const body=limitedBody(req);
   const draft=normaliseDraft(body.draft,identity);
-  const rows=await table('procure_ai_requests',{select:'pr_id,title,items,status,owner_auth_uid',branch_id:`eq.${identity.branch}`,department_id:`eq.${identity.dept}`,limit: '100'});
+  // Dedupe only against own live records; no cross-user titles or IDs leak.
+  const state=await table('rpc/procure_v13_state',{}, {method:'POST',body:{p_uid:identity.authUid}});
+  const rows=(state.purchaseRequests||[]).filter(r=>r.createdByEmail?.toLowerCase()===identity.email.toLowerCase()).map(r=>({pr_id:r.id,title:r.title,items:r.items,status:r.status,owner_auth_uid:identity.authUid}));
   const candidates=findSimilar(draft,rows,asText(body.excludePrId,120));
   // Nhân viên chỉ được biết có trùng nhu cầu; KHÔNG trả mã/tên phiếu của đồng nghiệp.
   const publicSimilar = identity.role==='requester' ? {similarCount:candidates.length} : {similar:candidates.map(({r,score})=>({id:r.pr_id,title:r.title,similarity:Number(score.toFixed(2))}))};

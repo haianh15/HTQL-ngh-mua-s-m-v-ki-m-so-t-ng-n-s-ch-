@@ -9,7 +9,7 @@ import { isRequesterRole } from '../domain/rules';
 import { analyzeDraft, suggestDraftWording } from '../ai/insights';
 import type { DraftInput, InsightReport, WritingSuggestion } from '../ai/insights';
 import { InsightCard } from '../components/ai/InsightCard';
-import { aiCheckDraft, aiAssistDraft, aiSyncRequest } from '../services/aiApi';
+import { aiCheckDraft, aiAssistDraft } from '../services/aiApi';
 import { useApp } from '../context/AppContext';
 import { PRItem, PRAttachment } from '../types';
 import { formatVND } from '../utils/formatters';
@@ -72,8 +72,6 @@ export const CreateEditPRView: React.FC = () => {
     if (!pendingDetailId || !purchaseRequests.some((pr) =>
       pr.id === pendingDetailId && pr.createdById === currentUser?.id
     )) return;
-    const saved=purchaseRequests.find(p=>p.id===pendingDetailId);
-    if(saved)void aiSyncRequest(saved).catch(()=>addToast('Đề nghị đã lưu trong trình duyệt nhưng chưa đồng bộ vào dữ liệu AI. Người duyệt chưa thể dùng chức năng tóm tắt AI cho phiếu này.', 'warning'));
     setPendingDetailId(null);
     navigateTo('PR_DETAIL', pendingDetailId);
   }, [pendingDetailId, purchaseRequests, currentUser?.id, navigateTo]);
@@ -143,31 +141,9 @@ export const CreateEditPRView: React.FC = () => {
   };
 
   const handleSimulateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    setIsUploading(true);
-    const accepted: PRAttachment[] = [];
-    for (const file of files) {
-      if (file.size > 1_000_000 || !/\.(pdf|xlsx|docx|png|jpg|jpeg)$/i.test(file.name)) {
-        addToast(`Không thể đính kèm ${file.name}: demo chỉ lưu tệp hợp lệ tối đa 1MB.`, 'error');
-        continue;
-      }
-      try {
-        const url = await new Promise<string>((resolve, reject)=>{
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result));
-          reader.onerror = () => reject(new Error('Không đọc được tệp'));
-          reader.readAsDataURL(file);
-        });
-        accepted.push({ id: `att-${Date.now()}-${accepted.length}`, name:file.name, size:file.size,
-          uploadedAt:new Date().toLocaleString('vi-VN'), uploadedBy:currentUser?.name || 'Người tạo',
-          url, type: /bao.?gia/i.test(file.name) ? 'quotation':'specification' });
-      } catch { addToast(`Lỗi đọc nội dung tệp ${file.name}.`, 'error'); }
-    }
-    setAttachments(prev=>[...prev,...accepted]);
-    setIsUploading(false);
-    e.target.value='';
-    if (accepted.length) addToast(`Đã lưu cục bộ ${accepted.length} tệp (chỉ trong trình duyệt demo).`, 'success');
+    // Fail closed: data: URLs are browser-only and are not valid procurement evidence.
+    addToast('Tệp đính kèm chưa được lưu trên Supabase Storage. Chức năng này tạm khóa để không làm mất chứng từ.', 'warning');
+    e.target.value = '';
   };
 
   const validate = (): boolean => {
@@ -219,28 +195,15 @@ export const CreateEditPRView: React.FC = () => {
     }
     setAwaitingAiAcknowledgement(false);
     setIsSubmitting(true);
-    setTimeout(() => {
+    try {
       if (editingPR) {
-        const submitted = updateDraftPR(editingPR.id, { title, purpose, needByDate, budgetId: selectedBudgetId, attachments }, items, !isDraft);
-        setIsSubmitting(false);
+        const submitted = await updateDraftPR(editingPR.id, { title, purpose, needByDate, budgetId: selectedBudgetId, attachments }, items, !isDraft);
         if (submitted) setPendingDetailId(editingPR.id);
-        return;
+      } else {
+        const newPrId = await createPurchaseRequest({ title: title || 'Bản nháp đề nghị', purpose, needByDate, budgetId: selectedBudgetId, attachments }, items, isDraft);
+        if (newPrId) setPendingDetailId(newPrId);
       }
-      const newPrId = createPurchaseRequest(
-        {
-          title: title || 'Bản nháp đề nghị',
-          purpose,
-          needByDate,
-          budgetId: selectedBudgetId,
-          attachments,
-        },
-        items,
-        isDraft
-      );
-
-      setIsSubmitting(false);
-      if (newPrId) setPendingDetailId(newPrId);
-    }, 500);
+    } finally { setIsSubmitting(false); }
   };
 
   return (
@@ -489,7 +452,7 @@ export const CreateEditPRView: React.FC = () => {
         {/* AI: không đọc dữ liệu ngoài quyền, không quyết định thay người sử dụng. */}
         <section className="mb-6 bg-[#F7F8FC] border border-[#DDE0EA] rounded-[16px] p-4 sm:p-5 space-y-3">
           <h2 className="font-bold text-base text-[#202039] flex items-center gap-2">Trợ lý kiểm tra và soạn đề nghị</h2>
-          <p className="text-xs text-[#62657A]">AI Gemini được gọi qua backend có đăng nhập và phân quyền. Nội dung đề nghị được gửi tới dịch vụ AI khi bạn bấm phân tích; không tự duyệt hay thay đổi ngân sách. Nếu mất kết nối, kết quả thay thế sẽ ghi rõ là demo quy tắc.</p>
+          <p className="text-xs text-[#62657A]">AI Gemini được gọi qua backend có đăng nhập và phân quyền. Nội dung đề nghị được gửi tới dịch vụ AI khi bạn bấm phân tích; không tự duyệt hay thay đổi ngân sách. Nếu dịch vụ AI lỗi, kiểm tra lại nội dung trước khi gửi; AI không quyết định nghiệp vụ.</p>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => {void aiCheckDraft(currentDraftForAI()).then(setAiCheckResult).catch(e=>addToast(e instanceof Error?e.message:'Lỗi AI', 'error'));}}>Kiểm tra đề nghị</Button>
             <Button variant="secondary" onClick={() => {void aiAssistDraft(currentDraftForAI()).then(setWritingSuggestion).catch(e=>addToast(e instanceof Error?e.message:'Lỗi AI', 'error'));}}>Gợi ý viết mục đích / thông số</Button>

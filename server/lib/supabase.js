@@ -62,7 +62,15 @@ export async function table(name, query = {}, {method='GET', body, upsert=false}
     body:body === undefined ? undefined : JSON.stringify(body),signal:AbortSignal.timeout(API_TIMEOUT),
   });
   const data=await parse(res);
-  if (!res.ok) {console.error('[Supabase]',name,res.status,data?.code || data?.message);throw new ApiError('DATABASE_ERROR','Không truy xuất được dữ liệu AI.',503);}
+  if (!res.ok) {
+    console.error('[Supabase]',name,res.status,data?.code || data?.message);
+    // Only expose vetted, server-authored SQL business errors from V13 RPC.
+    if (name==='rpc/procure_v13_mutate' && ['42501','23514','23503','23505','22023'].includes(data?.code)) {
+      const http=data.code==='42501'?403:(data.code==='22023'?400:409);
+      throw new ApiError('BUSINESS_RULE',String(data.message||'Không thể thực hiện nghiệp vụ.').slice(0,300),http);
+    }
+    throw new ApiError('DATABASE_ERROR','Không truy xuất được dữ liệu trên máy chủ.',503);
+  }
   return data;
 }
 export async function takeRateSlot(uid) {

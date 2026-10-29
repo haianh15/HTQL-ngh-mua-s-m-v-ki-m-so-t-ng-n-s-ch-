@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { analyzeBudgets } from '../ai/insights';
 import { InsightCard } from '../components/ai/InsightCard';
-import { aiAnalyzeBudgets, aiSyncBudgets } from '../services/aiApi';
+import { aiAnalyzeBudgets } from '../services/aiApi';
 import type { InsightReport } from '../ai/insights';
 import { useApp } from '../context/AppContext';
 import { formatVND } from '../utils/formatters';
@@ -42,6 +42,7 @@ export const BudgetManagementView: React.FC = () => {
     currentBranchScope,
     requestBudgetTransfer,
     releaseUncommittedRemainder,
+    recheckWaitingFunds,
     approveBudgetTransfer,
     rejectBudgetTransfer,
     navigateTo,
@@ -87,7 +88,6 @@ export const BudgetManagementView: React.FC = () => {
   const runBudgetAI = async()=>{
     setBudgetAILoading(true);
     try {
-      if(canManageBudget(currentUser)) await aiSyncBudgets(filteredBudgets);
       const result=await aiAnalyzeBudgets();setServerBudgetReport(result);
     }catch(e){addToast(e instanceof Error?e.message:'Không truy cập được AI ngân sách.','error');}
     finally{setBudgetAILoading(false);}
@@ -113,7 +113,7 @@ export const BudgetManagementView: React.FC = () => {
   };
 
 
-  const handleCreateTransfer = (e: React.FormEvent) => {
+  const handleCreateTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fromBudgetId || !toBudgetId || transferAmount <= 0 || !transferReason.trim()) {
       addToast('Vui lòng điền đầy đủ thông tin nguồn chuyển, nguồn nhận và số tiền.', 'warning');
@@ -124,7 +124,7 @@ export const BudgetManagementView: React.FC = () => {
       return;
     }
 
-    const ok = requestBudgetTransfer(fromBudgetId, toBudgetId, transferAmount, transferReason);
+    const ok = await requestBudgetTransfer(fromBudgetId, toBudgetId, transferAmount, transferReason);
     if (ok) {
       setIsTransferModalOpen(false);
       setTransferAmount(0);
@@ -227,7 +227,7 @@ export const BudgetManagementView: React.FC = () => {
             <button type="button" disabled={budgetAILoading} className="bg-[#5540C7] text-white text-xs font-semibold px-4 py-2 rounded-[10px] disabled:opacity-60" onClick={()=>void runBudgetAI()}>
               {budgetAILoading?'Đang phân tích…':'Phân tích ngân sách bằng AI Gemini'}
             </button>
-            <p className="text-[11px] text-[#62657A]">Tài chính: nút này đồng bộ ảnh chụp ngân sách demo của khu vực lên Supabase để AI phân tích. Không tạo bút toán hoặc thay số dư chính thức. Ban Giám đốc: đọc số liệu đã đồng bộ.</p>
+            <p className="text-[11px] text-[#62657A]">Số dư được truy xuất từ sổ ngân sách V13 trên máy chủ. AI chỉ phân tích, không ghi sổ hoặc ra quyết định.</p>
             <InsightCard title="Phân tích ngân sách & cảnh báo bất thường" report={serverBudgetReport||aiBudgetReport}/>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -518,7 +518,10 @@ export const BudgetManagementView: React.FC = () => {
                           {formatVND(avail)} (Thiếu {formatVND(pr.totalAmount - avail)})
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          {financeCanRelease && <Button
+                          {financeCanRelease && avail >= pr.totalAmount && <Button size="small" variant="primary" onClick={()=>recheckWaitingFunds(pr.id)}>
+                            Trình duyệt lại
+                          </Button>}
+                          {financeCanRelease && avail < pr.totalAmount && <Button
                             variant="secondary"
                             size="small"
                             onClick={() => {
@@ -544,7 +547,7 @@ export const BudgetManagementView: React.FC = () => {
       {activeTab === 'RELEASE' && financeCanRelease && <div className="bg-white border border-[#DDE0EA] rounded-[16px] overflow-hidden">
         <div className="p-5 border-b border-[#DDE0EA]">
           <h2 className="text-base font-bold text-[#202039]">Xác nhận giải phóng ngân sách đang giữ</h2>
-          <p className="text-xs text-[#62657A] mt-1">Tài chính chỉ thực hiện khi Mua hàng đã xác nhận phần dư không còn nghĩa vụ. Bản demo chưa hỗ trợ đính kèm biên bản đối soát.</p>
+          <p className="text-xs text-[#62657A] mt-1">Tài chính chỉ thực hiện khi Mua hàng đã xác nhận phần dư không còn nghĩa vụ. Chỉ thực hiện khi có chứng từ đối soát đã được lưu giữ theo quy định.</p>
         </div>
         <div className="overflow-x-auto"><table className="w-full text-sm text-left">
           <thead className="bg-[#F7F8FC] text-xs text-[#62657A]"><tr><th className="p-3">Mã / Đề nghị</th><th className="p-3">Nhà cung cấp</th><th className="p-3 text-right">Giữ còn lại</th><th className="p-3 text-center">Xác nhận</th></tr></thead>

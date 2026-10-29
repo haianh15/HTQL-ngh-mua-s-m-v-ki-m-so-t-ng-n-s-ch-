@@ -107,10 +107,10 @@ export const ScenariosRunnerModal: React.FC<ScenariosRunnerModalProps> = ({
           <Button
             variant="ghost"
             size="small"
-            onClick={resetDemoData}
+            disabled
             icon={<RotateCcw className="w-3.5 h-3.5" />}
           >
-            Khôi phục dữ liệu ban đầu
+            Không khôi phục dữ liệu thật
           </Button>
         </div>
 

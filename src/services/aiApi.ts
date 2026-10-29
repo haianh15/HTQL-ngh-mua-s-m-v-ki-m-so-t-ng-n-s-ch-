@@ -88,3 +88,23 @@ export async function aiSyncRequest(pr:PurchaseRequest){
 export async function aiSyncBudgets(budgets:BudgetPool[]){
   return api('/api/ai/sync-budgets',{budgets:budgets.map(b=>({id:b.id,name:b.name,branchId:b.branchId,allocated:b.allocated,adjustments:b.adjustments,held:b.held,committed:b.committed,used:b.used}))});
 }
+
+// V13 business transactions; business data is NEVER written to localStorage.
+export type LiveState = {
+  users: User[];purchaseRequests:PurchaseRequest[];budgetPools:BudgetPool[];
+  ledgerEntries: import('../types').BudgetLedgerEntry[];
+  transfers: import('../types').BudgetTransferRequest[];
+  delegations: import('../types').Delegation[];
+  notifications: import('../types').NotificationItem[];
+  auditLogs: import('../types').AuditLogItem[];
+  accountingBatches: import('../types').AccountingImportBatch[];
+};
+export async function getLiveState():Promise<LiveState>{
+  const {state}=await api<{state:LiveState}>('/api/ops/state',undefined,'GET');
+  if(!state||!Array.isArray(state.purchaseRequests)||!Array.isArray(state.budgetPools))
+    throw Error('Máy chủ chưa kích hoạt cơ sở dữ liệu nghiệp vụ V13. Không hiển thị dữ liệu demo.');
+  return state;
+}
+export async function liveMutation(action:string,data:Record<string,unknown>):Promise<{ok:boolean;id?:string;status?:string}>{
+  return api('/api/ops/mutate',{action,data});
+}

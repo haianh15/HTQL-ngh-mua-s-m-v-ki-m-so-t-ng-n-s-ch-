@@ -52,7 +52,7 @@ export const AccountingReconciliationView: React.FC = () => {
           invoiceDate:get('invoicedate'), department:get('department'), description:get('description'),
           validationStatus:'VALID', validationMessage:'' };
       });
-      const batchId = importAccountingFile(file.name,rows);
+      const batchId = await importAccountingFile(file.name,rows);
       if (batchId) setActiveBatchId(batchId);
     } catch (e) { addToast(`Không nhập được CSV: ${(e as Error).message}`, 'error'); }
   };
@@ -62,7 +62,7 @@ export const AccountingReconciliationView: React.FC = () => {
   );
 
   // Mẫu file kế toán giả lập cho kiểm thử
-  const handleLoadSampleBatch = () => {
+  const handleLoadSampleBatch = async () => {
     const sampleRows: AccountingImportRow[] = [
       {
         rowId: 1,
@@ -118,14 +118,14 @@ export const AccountingReconciliationView: React.FC = () => {
       },
     ];
 
-    const batchId = importAccountingFile('Sao_ke_ke_toan_chi_phi_Q4_2026.xlsx', sampleRows);
+    const batchId = await importAccountingFile('Sao_ke_ke_toan_chi_phi_Q4_2026.xlsx', sampleRows);
     setActiveBatchId(batchId);
   };
 
   const currentBatch = accountingBatches.find((b) => b.id === activeBatchId);
 
   const handleCommit = (batchId: string) => {
-    commitAccountingBatch(batchId);
+    void commitAccountingBatch(batchId);
   };
 
   return (
@@ -145,7 +145,7 @@ export const AccountingReconciliationView: React.FC = () => {
         </label>
         <Button
           variant="secondary"
-          onClick={handleLoadSampleBatch}
+          onClick={()=>addToast('Dữ liệu mẫu đã tắt trong hệ thống thật. Vui lòng nhập CSV chứng từ thực tế.','warning')}
           icon={<FileSpreadsheet className="w-4 h-4" />}
         >
           Nạp tệp đối soát mẫu thử nghiệm
@@ -312,7 +312,7 @@ export const AccountingReconciliationView: React.FC = () => {
               <p className="text-xs text-[#62657A] max-w-sm mx-auto mb-4">
                 Nhấn vào nút "Nạp tệp đối soát mẫu thử nghiệm" để kiểm tra luồng phát hiện lỗi trùng lặp và đối soát chi phí tự động.
               </p>
-              <Button variant="primary" size="small" onClick={handleLoadSampleBatch}>
+              <Button variant="primary" size="small" onClick={()=>addToast('Dữ liệu mẫu đã tắt trong hệ thống thật. Vui lòng nhập CSV chứng từ thực tế.','warning')}>
                 Nạp tệp mẫu ngay
               </Button>
             </div>

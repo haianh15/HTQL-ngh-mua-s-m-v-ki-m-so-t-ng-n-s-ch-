@@ -123,6 +123,7 @@ export function canReadRequest(user: User | null, pr: PurchaseRequest, delegatio
   if (pr.createdById === user!.id) return true; // Người tạo theo dõi phiếu của chính mình.
   if (role === 'requester' || pr.status === 'DRAFT') return false;
   if (!canSeeBranch(user, pr.branchId)) return false;
+  if(role==='finance' && (pr.status==='WAITING_FUNDS' || (pr.status==='IN_PROGRESS' && pr.totalAmount>(pr.execution?.actualOrderedAmount||0)+(pr.execution?.releasedAmount||0))))return true;
   if (['dept_head', 'finance', 'branch_director', 'bod'].includes(role))
     return canApproveStep(user, pr, delegations);
   // Mua hàng, kế toán chỉ xử lý phiếu đã duyệt ở chi nhánh được phân công.

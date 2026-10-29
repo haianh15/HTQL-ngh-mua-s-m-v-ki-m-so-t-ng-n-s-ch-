@@ -97,10 +97,7 @@ export const ApprovalQueueView: React.FC = () => {
     if (!pr) return;
 
     setIsAtomicHolding(true);
-    setTimeout(() => {
-      setIsAtomicHolding(false);
-      processApprovalDecision(pr.id, pr.currentStepIndex, 'APPROVED');
-    }, 400);
+    void processApprovalDecision(pr.id, pr.currentStepIndex, 'APPROVED').finally(()=>setIsAtomicHolding(false));
   };
 
   const handleOpenReject = (prId: string) => {
@@ -113,7 +110,7 @@ export const ApprovalQueueView: React.FC = () => {
     if (!targetPrId) return;
     const pr = purchaseRequests.find((p) => p.id === targetPrId);
     if (pr) {
-      processApprovalDecision(pr.id, pr.currentStepIndex, 'REJECTED', rejectReason);
+      void processApprovalDecision(pr.id, pr.currentStepIndex, 'REJECTED', rejectReason);
     }
     setRejectDialogOpen(false);
   };
@@ -128,7 +125,7 @@ export const ApprovalQueueView: React.FC = () => {
     if (!targetPrId) return;
     const pr = purchaseRequests.find((p) => p.id === targetPrId);
     if (pr) {
-      processApprovalDecision(
+      void processApprovalDecision(
         pr.id,
         pr.currentStepIndex,
         'REVISION_REQUESTED',

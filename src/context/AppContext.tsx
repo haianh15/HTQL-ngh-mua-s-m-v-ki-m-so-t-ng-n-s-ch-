@@ -34,7 +34,7 @@ import {
   INITIAL_AUDIT_LOGS,
 } from '../data/initialData';
 import { ToastMessage } from '../components/common/Toast';
-import { signInReal, signOutReal, restoreRealUser, clearAuth } from '../services/aiApi';
+import { signInReal, signOutReal, restoreRealUser, clearAuth, getLiveState, liveMutation } from '../services/aiApi';
 import { DEMO_PASSWORD, DEMO_OTP, availableBudget, canSeeBranch, canApproveStep, canViewAllRegions, canReadRequest, canAccessScreen, defaultScreenFor, isValidPRItems, isValidAmount, reserveBudget, commitBudget, recognizeExpense, releaseHold, transferBudget, heldForRequest, isRequesterRole, primaryRole, canReadBudget, canSeeFinancialFigures, canManageBudget, canExecutePurchase, canReconcile, canManageUsers, buildApprovalTimeline, statusForApprovalStep } from '../domain/rules';
 
 interface AppContextType {
@@ -78,11 +78,11 @@ interface AppContextType {
   updateUserRolesAndScope: (userId: string, roles: User['roles'], branchId: BranchCode) => void;
 
   // PR Actions (TO-BE 01)
-  createPurchaseRequest: (data: Partial<PurchaseRequest>, items: PRItem[], isDraft?: boolean) => string;
-  updateDraftPR: (prId: string, data: Partial<PurchaseRequest>, items: PRItem[], submitNow?: boolean) => boolean;
-  submitDraftPR: (prId: string) => boolean;
-  createPRRevision: (prId: string, newItems: PRItem[], changeSummary: string) => boolean;
-  requestPRCancel: (prId: string, reason: string) => boolean;
+  createPurchaseRequest: (data: Partial<PurchaseRequest>, items: PRItem[], isDraft?: boolean) => Promise<string>;
+  updateDraftPR: (prId: string, data: Partial<PurchaseRequest>, items: PRItem[], submitNow?: boolean) => Promise<boolean>;
+  submitDraftPR: (prId: string) => Promise<boolean>;
+  createPRRevision: (prId: string, newItems: PRItem[], changeSummary: string) => Promise<boolean>;
+  requestPRCancel: (prId: string, reason: string) => Promise<boolean>;
 
   // Approval Actions (TO-BE 01)
   processApprovalDecision: (
@@ -91,7 +91,7 @@ interface AppContextType {
     decision: 'APPROVED' | 'REJECTED' | 'REVISION_REQUESTED',
     comments?: string,
     reasonCode?: string
-  ) => { success: boolean; error?: string };
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // Procurement Execution (TO-BE 02)
   receivePRForProcurement: (prId: string) => void;
@@ -104,7 +104,7 @@ interface AppContextType {
   releaseUncommittedRemainder: (prId: string, releaseAmount: number, reason: string) => void;
 
   // Accounting Import & Reconciliation (TO-BE 02, UI-08)
-  importAccountingFile: (fileName: string, rows: AccountingImportRow[]) => string;
+  importAccountingFile: (fileName: string, rows: AccountingImportRow[]) => Promise<string>;
   commitAccountingBatch: (batchId: string) => void;
 
   // Budget Actions (TO-BE 03)
@@ -114,7 +114,8 @@ interface AppContextType {
     amount: number,
     reason: string,
     docName?: string
-  ) => boolean;
+  ) => Promise<boolean>;
+  recheckWaitingFunds: (prId: string) => void;
   approveBudgetTransfer: (transferId: string) => void;
   rejectBudgetTransfer: (transferId: string, reason: string) => void;
 
@@ -144,10 +145,7 @@ const loadDemo = <T,>(key: string, fallback: T): T => {
 };
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Users and Auth State
-  const [users, setUsers] = useState<User[]>(() => {
-    const stored = loadDemo('users', INITIAL_USERS);
-    return [...stored, ...INITIAL_USERS.filter(u => u.id.startsWith('usr_finance_alt') || u.id.startsWith('usr_bod_alt') || u.id.startsWith('usr_finance_hcm')).filter(u => !stored.some(old => old.id === u.id))];
-  });
+  const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [mfaPendingUser, setMfaPendingUser] = useState<User | null>(null);
@@ -158,25 +156,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const authRevision = useRef(0);
 
   // Core Data
-  const [budgetPools, setBudgetPools] = useState<BudgetPool[]>(() => {
-    const stored = loadDemo('budgetPools', INITIAL_BUDGET_POOLS);
-    return [...stored, ...INITIAL_BUDGET_POOLS.filter(b => b.id.startsWith('BG-2026-HQ-FIN')).filter(b => !stored.some(old => old.id === b.id))];
-  });
-  const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>(() => loadDemo('purchaseRequests', INITIAL_PURCHASE_REQUESTS));
-  const [ledgerEntries, setLedgerEntries] = useState<BudgetLedgerEntry[]>(() => loadDemo('ledgerEntries', INITIAL_LEDGER_ENTRIES));
-  const [transfers, setTransfers] = useState<BudgetTransferRequest[]>(() => loadDemo('transfers', INITIAL_TRANSFERS));
-  const [delegations, setDelegations] = useState<Delegation[]>(() => loadDemo('delegations', INITIAL_DELEGATIONS));
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => loadDemo('notifications', INITIAL_NOTIFICATIONS));
-  const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>(() => loadDemo('auditLogs', INITIAL_AUDIT_LOGS));
-  const [accountingBatches, setAccountingBatches] = useState<AccountingImportBatch[]>(() => loadDemo('accountingBatches', []));
+  const [budgetPools, setBudgetPools] = useState<BudgetPool[]>([]);
+  const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([]);
+  const [ledgerEntries, setLedgerEntries] = useState<BudgetLedgerEntry[]>([]);
+  const [transfers, setTransfers] = useState<BudgetTransferRequest[]>([]);
+  const [delegations, setDelegations] = useState<Delegation[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
+  const [accountingBatches, setAccountingBatches] = useState<AccountingImportBatch[]>([]);
 
-  // DEMO ONLY: store non-secret business data in this browser. No server, no shared transactions.
-  useEffect(() => {
-    const values = { users, budgetPools, purchaseRequests, ledgerEntries, transfers, delegations, notifications, auditLogs, accountingBatches };
-    Object.entries(values).forEach(([key, value]) => {
-      try { localStorage.setItem('procure-demo-v2-' + key, JSON.stringify(value)); } catch { /* storage quota */ }
-    });
-  }, [users, budgetPools, purchaseRequests, ledgerEntries, transfers, delegations, notifications, auditLogs, accountingBatches]);
+  // V13: no localStorage writes for business records. Data comes from the server.
 
   // Timeout UI session after 30 minutes of inactivity (not server-side authentication).
   useEffect(() => {
@@ -1475,6 +1464,91 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addToast('Đã khôi phục dữ liệu mẫu ban đầu của hệ thống.', 'info');
   };
 
+  // V13: service-driven operations only. Never mutate a financial balance in the browser.
+  const refreshLive = async () => {
+    const state = await getLiveState();
+    setUsers(state.users||[]);setPurchaseRequests(state.purchaseRequests||[]);
+    setBudgetPools(state.budgetPools||[]);setLedgerEntries(state.ledgerEntries||[]);
+    setTransfers(state.transfers||[]);setDelegations(state.delegations||[]);
+    setNotifications(state.notifications||[]);setAuditLogs(state.auditLogs||[]);
+    setAccountingBatches(state.accountingBatches||[]);
+  };
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let closed=false;
+    getLiveState().then(state=>{
+      if(closed) return;
+      setUsers(state.users||[]);setPurchaseRequests(state.purchaseRequests||[]);
+      setBudgetPools(state.budgetPools||[]);setLedgerEntries(state.ledgerEntries||[]);
+      setTransfers(state.transfers||[]);setDelegations(state.delegations||[]);
+      setNotifications(state.notifications||[]);setAuditLogs(state.auditLogs||[]);
+      setAccountingBatches(state.accountingBatches||[]);
+    }).catch(error=>{if(!closed)addToast('Không tải được dữ liệu nghiệp vụ V13: '+(error as Error).message,'error');});
+    return()=>{closed=true;};
+  },[isAuthenticated,currentUser?.id]);
+  const perform = async(action:string,data:Record<string,unknown>,successText?:string)=>{
+    try {
+      const result=await liveMutation(action,data);
+      try {await refreshLive();}
+      catch {addToast('Giao dịch đã được máy chủ xác nhận nhưng chưa tải lại được dữ liệu. Hãy làm mới trang, không nhấn gửi lần nữa.','warning');}
+      if(successText)addToast(successText,'success');
+      return result;
+    }catch(e){
+      const msg=e instanceof Error?e.message:'Máy chủ từ chối yêu cầu.';
+      // Refresh also on failed business rule: WAITING_FUNDS may have been committed.
+      try {await refreshLive();}catch{}
+      addToast(msg,'error');
+      throw e;
+    }
+  };
+  const onlineCreatePurchaseRequest=async(data:Partial<PurchaseRequest>,items:PRItem[],isDraft=false):Promise<string>=>{
+    try{return (await perform('PR_CREATE',{request:{...data,items},isDraft},isDraft?'Đã lưu nháp trên máy chủ.':'Đã gửi đề nghị tới người duyệt.')).id||'';}
+    catch{return '';}
+  };
+  const onlineUpdateDraftPR=async(prId:string,data:Partial<PurchaseRequest>,items:PRItem[],submitNow=false):Promise<boolean>=>{
+    try {const pr=purchaseRequests.find(p=>p.id===prId);if(!pr)throw Error('Không tìm thấy đề nghị.');
+      await perform(submitNow?'PR_SUBMIT':'PR_UPDATE',{prId,request:{...pr,...data,items},isDraft:!submitNow},submitNow?'Đã gửi phê duyệt.':'Đã cập nhật bản nháp.');return true;
+    }catch{return false;}
+  };
+  const onlineSubmitDraftPR=async(prId:string):Promise<boolean>=>{
+    try{await perform('PR_SUBMIT',{prId},'Đã gửi đề nghị.');return true;}catch{return false;}
+  };
+  const onlineCreatePRRevision=async(prId:string,newItems:PRItem[],changeSummary:string):Promise<boolean>=>{
+    try{await perform('PR_REVISE',{prId,items:newItems,changeSummary},'Đã gửi phiên bản bổ sung.');return true;}catch{return false;}
+  };
+  const onlineRequestPRCancel=async(prId:string,reason:string):Promise<boolean>=>{
+    try{await perform('PR_CANCEL',{prId,comments:reason},'Đã hủy đề nghị.');return true;}catch{return false;}
+  };
+  const onlineApproval=async(prId:string,stepIndex:number,decision:'APPROVED'|'REJECTED'|'REVISION_REQUESTED',comments='',reasonCode=''):Promise<{success:boolean;error?:string}>=>{
+    try{const pr=purchaseRequests.find(p=>p.id===prId);if(!pr||pr.currentStepIndex!==stepIndex)throw Error('Hồ sơ đã đổi bước duyệt.');
+      await perform('APPROVAL',{prId,decision,comments,reasonCode},'Đã ghi nhận quyết định trên máy chủ.');return {success:true};
+    }catch(e){return {success:false,error:e instanceof Error?e.message:'Không thể xử lý phê duyệt.'};}
+  };
+  const onlineReceive=async(prId:string)=>{try{await perform('PROC_RECEIVE',{prId},'Đã tiếp nhận mua hàng.');}catch{}};
+  const onlineOrder=async(prId:string,amount:number,poRef:string,supplierName:string)=>{try{await perform('PROC_ORDER',{prId,amount,poRef,supplierName},'Đã ghi nhận cam kết PO.');}catch{}};
+  const onlineRelease=async(prId:string,amount:number,comments:string)=>{try{await perform('BUDGET_RELEASE',{prId,amount,comments},'Đã giải phóng số giữ theo chứng từ.');}catch{}};
+  const onlineTransferRequest=async(fromBudgetId:string,toBudgetId:string,amount:number,reason:string,docName?:string):Promise<boolean>=>{
+    try{await perform('TRANSFER_REQUEST',{fromBudgetId,toBudgetId,amount,comments:reason,docName},'Đã trình điều chuyển lên Ban Giám đốc.');return true;}catch{return false;}
+  };
+  const onlineRecheckWaitingFunds=async(prId:string)=>{try{await perform('BUDGET_RECHECK',{prId},'Đã đưa đề nghị trở lại hàng chờ duyệt cuối.');}catch{}};
+  const onlineTransferDecide=async(transferId:string,decision:'APPROVED'|'REJECTED',comments='')=>{try{await perform('TRANSFER_DECIDE',{transferId,decision,comments},'Đã ghi nhận quyết định điều chuyển.');}catch{}};
+  const onlineAccountingImport=async(fileName:string,rows:AccountingImportRow[]):Promise<string>=>{
+    try{return (await perform('ACCOUNT_IMPORT',{fileName,rows},'Đã tải tệp lên máy chủ để kiểm tra.')).id||'';}catch{return '';}
+  };
+  const onlineAccountingCommit=async(batchId:string)=>{try{await perform('ACCOUNT_COMMIT',{batchId},'Đã ghi nhận kế toán và cập nhật sổ cái.');}catch{}};
+  const onlineNotificationRead=async(id:string)=>{try{await perform('NOTIFICATION_READ',{id});}catch{}};
+  const onlineNotificationReadAll=async()=>{try{await perform('NOTIFICATION_READ',{all:true});}catch{}};
+  const onlineUserActive=async(id:string)=>{const target=users.find(u=>u.id===id);if(!target)return;
+    try{await perform('ADMIN_USER',{userId:id,active:!target.isActive},'Đã cập nhật trạng thái tài khoản.');}catch{}
+  };
+  const onlineUserRole=async(id:string,roles:User['roles'],branch:BranchCode)=>{if(roles.length!==1||branch!==currentUser?.branchId){addToast('Không được đổi phạm vi chi nhánh.','error');return;}
+    try{await perform('ADMIN_USER',{userId:id,role:roles[0]},'Đã cập nhật vai trò.');}catch{}
+  };
+  const onlineDelegate=async(d:Omit<Delegation,'id'|'isActive'>)=>{try{await perform('DELEGATE',d,'Đã tạo ủy quyền.');}catch{}};
+  const onlineRevokeDelegate=async(id:string)=>{try{await perform('REVOKE_DELEGATION',{id},'Đã thu hồi ủy quyền.');}catch{}};
+  const disabledDemoScenario=(key:'A'|'B'|'C'|'D'|'E'|'F'|'G')=>({title:`Kịch bản ${key} - chỉ chạy ở môi trường kiểm thử`,steps:['Không chạy mô phỏng thay đổi dữ liệu trên hệ thống thực tế.'],result:'Chức năng demo đã bị vô hiệu hóa để tránh thay đổi dữ liệu thật.',status:'WARNING' as const});
+  const disabledDemoReset=()=>addToast('Không thể khôi phục dữ liệu mẫu trên hệ thống thực tế.','warning');
+
   const value = useMemo(
     () => ({
       currentUser,
@@ -1497,7 +1571,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? delegations.filter(d=>users.some(u=>u.id===d.fromUserId && u.branchId===currentUser?.branchId) &&
           users.some(u=>u.id===d.toUserId && u.branchId===currentUser?.branchId))
         : delegations.filter(d=>d.fromUserId===currentUser?.id || d.toUserId===currentUser?.id),
-      notifications: primaryRole(currentUser)==='requester' ? [] : notifications.filter(n=>n.userId===currentUser?.id),
+      notifications: notifications.filter(n=>n.userId===currentUser?.id),
       auditLogs: canManageUsers(currentUser) ? auditLogs.filter(a=>users.some(u=>u.id===a.userId && u.branchId===currentUser?.branchId)) : [],
       accountingBatches: primaryRole(currentUser)==='accountant'
         ? accountingBatches.filter(batch=>batch.rows.some(r=>canSeeBranch(currentUser,
@@ -1519,28 +1593,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       switchUserDemo,
       requestPasswordReset,
       changePassword,
-      toggleUserActive,
-      updateUserRolesAndScope,
-      createPurchaseRequest,
-      updateDraftPR,
-      submitDraftPR,
-      createPRRevision,
-      requestPRCancel,
-      processApprovalDecision,
-      receivePRForProcurement,
-      recordActualPOOrder,
-      releaseUncommittedRemainder,
-      importAccountingFile,
-      commitAccountingBatch,
-      requestBudgetTransfer,
-      approveBudgetTransfer,
-      rejectBudgetTransfer,
-      createDelegation,
-      revokeDelegation,
-      markNotificationRead,
-      markAllNotificationsRead,
-      runTestScenario,
-      resetDemoData,
+      toggleUserActive: onlineUserActive,
+      updateUserRolesAndScope: onlineUserRole,
+      createPurchaseRequest: onlineCreatePurchaseRequest,
+      updateDraftPR: onlineUpdateDraftPR,
+      submitDraftPR: onlineSubmitDraftPR,
+      createPRRevision: onlineCreatePRRevision,
+      requestPRCancel: onlineRequestPRCancel,
+      processApprovalDecision: onlineApproval,
+      receivePRForProcurement: onlineReceive,
+      recordActualPOOrder: onlineOrder,
+      releaseUncommittedRemainder: onlineRelease,
+      importAccountingFile: onlineAccountingImport,
+      commitAccountingBatch: onlineAccountingCommit,
+      requestBudgetTransfer: onlineTransferRequest,
+      recheckWaitingFunds: onlineRecheckWaitingFunds,
+      approveBudgetTransfer: (id: string) => onlineTransferDecide(id,'APPROVED'),
+      rejectBudgetTransfer: (id: string, reason: string) => onlineTransferDecide(id,'REJECTED',reason),
+      createDelegation: onlineDelegate,
+      revokeDelegation: onlineRevokeDelegate,
+      markNotificationRead: onlineNotificationRead,
+      markAllNotificationsRead: onlineNotificationReadAll,
+      runTestScenario: disabledDemoScenario,
+      resetDemoData: disabledDemoReset,
     }),
     [
       currentUser,

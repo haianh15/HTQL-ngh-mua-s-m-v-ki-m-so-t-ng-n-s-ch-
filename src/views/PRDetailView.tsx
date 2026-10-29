@@ -100,36 +100,36 @@ export const PRDetailView: React.FC = () => {
   // Xử lý phê duyệt bước hiện tại
   const handleApprove = () => {
     setIsAtomicHolding(true);
-    setTimeout(() => {
+    void (async () => {
+      const res = await processApprovalDecision(pr.id, pr.currentStepIndex, 'APPROVED');
       setIsAtomicHolding(false);
-      const res = processApprovalDecision(pr.id, pr.currentStepIndex, 'APPROVED');
       if (res.success) {
         // Sau khi hoàn tất bước duyệt, về hàng chờ của vai trò hiện tại.
         navigateTo('APPROVAL_QUEUE');
       } else if (res.error) {
         addToast(res.error, 'error');
       }
-    }, 450);
+    })();
   };
 
-  const handleConfirmReject = () => {
+  const handleConfirmReject = async () => {
     if (!rejectReason.trim()) {
       addToast('Bắt buộc phải nhập lý do từ chối hồ sơ.', 'error');
       return;
     }
-    const res = processApprovalDecision(pr.id, pr.currentStepIndex, 'REJECTED', rejectReason);
+    const res = await processApprovalDecision(pr.id, pr.currentStepIndex, 'REJECTED', rejectReason);
     if (res.success) navigateTo('APPROVAL_QUEUE');
     else if (res.error) addToast(res.error, 'error');
     setIsRejectDialogOpen(false);
     setRejectReason('');
   };
 
-  const handleConfirmRequestRevision = () => {
+  const handleConfirmRequestRevision = async () => {
     if (!requestRevisionComments.trim()) {
       addToast('Bắt buộc phải nêu rõ nội dung cần bổ sung.', 'error');
       return;
     }
-    const res = processApprovalDecision(
+    const res = await processApprovalDecision(
       pr.id,
       pr.currentStepIndex,
       'REVISION_REQUESTED',
@@ -146,7 +146,7 @@ export const PRDetailView: React.FC = () => {
       addToast('Bắt buộc phải nhập lý do hủy đề nghị.', 'error');
       return;
     }
-    requestPRCancel(pr.id, cancelReason);
+    void requestPRCancel(pr.id, cancelReason);
     setIsCancelDialogOpen(false);
     setCancelReason('');
   };
@@ -158,7 +158,7 @@ export const PRDetailView: React.FC = () => {
       addToast('Vui lòng nêu rõ lý do điều chỉnh phiên bản.', 'warning');
       return;
     }
-    createPRRevision(pr.id, revisionItems, revisionComments);
+    void createPRRevision(pr.id, revisionItems, revisionComments);
     setIsRevisionModalOpen(false);
     setRevisionComments('');
   };

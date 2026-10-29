@@ -28,7 +28,7 @@ function fakeFetch(url,opts){
   if(u.endsWith('/auth/v1/user'))return Promise.resolve(mockResponse({id:requester.authUid,email:requester.email}));
   if(u.includes('/procure_ai_profiles'))return Promise.resolve(mockResponse([{auth_uid:requester.authUid,user_code:requester.code,email:requester.email,display_name:requester.name,role:'requester',branch_id:'HQ',department_id:'IT',active:true}]));
   if(u.includes('/rpc/procure_ai_take_slot'))return Promise.resolve(mockResponse(true));
-  if(u.includes('/procure_ai_requests'))return Promise.resolve(mockResponse([{pr_id:'PR123',title:'Laptop Dell',items:normaliseDraft(draft,requester).items,status:'PENDING_DEPT',owner_auth_uid:'someone-else',branch_id:'HQ',department_id:'IT'}]));
+  if(u.includes('/rpc/procure_v13_state'))return Promise.resolve(mockResponse({purchaseRequests:[{id:'PR-OWN',title:'Laptop Dell',items:normaliseDraft(draft,requester).items,status:'PENDING_DEPT',createdByEmail:requester.email},{id:'PR123',title:'Laptop Dell',items:normaliseDraft(draft,requester).items,status:'PENDING_DEPT',createdByEmail:'other@example.com'}],budgetPools:[]}));
   if(u.includes('/procure_ai_budgets'))return Promise.resolve(mockResponse([]));
   if(u.includes(':generateContent'))return Promise.resolve(mockResponse({candidates:[{content:{parts:[{text:JSON.stringify({headline:'Có điểm cần kiểm tra',details:['3 nguồn'],insights:[]})}]}}]}));
   throw Error('Unexpected URL '+u);

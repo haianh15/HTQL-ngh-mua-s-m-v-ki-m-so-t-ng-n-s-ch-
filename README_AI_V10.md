@@ -1,3 +1,5 @@
+**LƯU Ý: Đây là tài liệu lịch sử của bản V10, không mô tả các API V11. Xem README.md và HUONG_DAN_V11_BACKEND.md.**
+
 # PROCURE UI V10 — TÍCH HỢP 4 TÍNH NĂNG HỖ TRỢ THÔNG MINH (DEMO)
 
 ## Căn cứ và trạng thái

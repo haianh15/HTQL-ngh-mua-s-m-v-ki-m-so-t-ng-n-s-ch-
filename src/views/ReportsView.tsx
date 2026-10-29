@@ -81,7 +81,7 @@ export const ReportsView: React.FC = () => {
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div>
         <h1 className="text-2xl font-bold text-[#202039]">{isProcurement ? 'Báo cáo mua hàng' : isFinance ? 'Báo cáo ngân sách' : isAccountant ? 'Báo cáo kế toán' : actor==='branch_director' ? 'Báo cáo chi nhánh' : 'Báo cáo toàn công ty'}</h1>
-        <p className="text-xs text-[#62657A] mt-1">Phạm vi: {scope} · Dữ liệu demo hiện có · {new Date().toLocaleDateString('vi-VN')}</p>
+        <p className="text-xs text-[#62657A] mt-1">Phạm vi: {scope} · Dữ liệu nghiệp vụ trên máy chủ · {new Date().toLocaleDateString('vi-VN')}</p>
       </div>
       <div className="flex gap-2 flex-wrap">
         <Button variant="secondary" size="small" onClick={exportCsv} icon={<FileSpreadsheet className="w-4 h-4" />}>Xuất Excel (CSV)</Button>
