@@ -5,7 +5,7 @@
  * Tuân thủ chính xác Pattern "Quyết định có ngữ cảnh" từ Design System Section 04
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { formatVND, getPRStatusBadgeInfo } from '../utils/formatters';
 import { Badge } from '../components/common/Badge';
@@ -28,6 +28,8 @@ import { PRItem } from '../types';
 import { canApproveStep, canAccessScreen, canReadBudget, isRequesterRole } from '../domain/rules';
 import { analyzeApproval } from '../ai/insights';
 import { InsightCard } from '../components/ai/InsightCard';
+import { aiReviewRequest } from '../services/aiApi';
+import type { InsightReport } from '../ai/insights';
 
 export const PRDetailView: React.FC = () => {
   const {
@@ -58,6 +60,16 @@ export const PRDetailView: React.FC = () => {
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [isAtomicHolding, setIsAtomicHolding] = useState(false);
+
+  const [realApprovalReport, setRealApprovalReport] = useState<InsightReport|null>(null);
+  const [approvalAiError, setApprovalAiError] = useState('');
+  useEffect(()=>{
+    if(!pr || !canAccessScreen(currentUser,'APPROVAL_QUEUE') || pr.createdById===currentUser?.id)return;
+    let live=true;
+    setRealApprovalReport(null);setApprovalAiError('');
+    aiReviewRequest(pr.id).then(r=>{if(live)setRealApprovalReport(r);}).catch(e=>{if(live)setApprovalAiError(e instanceof Error?e.message:'Không gọi được AI.');});
+    return()=>{live=false;};
+  },[pr?.id,currentUser?.id]);
 
   // Edit quantity for new revision
   const [revisionItems, setRevisionItems] = useState<PRItem[]>(pr.items);
@@ -337,8 +349,8 @@ export const PRDetailView: React.FC = () => {
             {/* Trợ lý tóm tắt và lưu ý dành cho người có quyền phê duyệt. */}
           {canAccessScreen(currentUser, 'APPROVAL_QUEUE') && pr.createdById !== currentUser?.id &&
             <div className="mb-5">
-              <InsightCard title="Hỗ trợ đánh giá hồ sơ trước phê duyệt"
-                report={analyzeApproval(pr, purchaseRequests, budget && canReadBudget(currentUser, budget) ? budget : undefined, !!budget && canReadBudget(currentUser, budget))} />
+              {realApprovalReport ? <InsightCard title="Hỗ trợ đánh giá hồ sơ trước phê duyệt" report={realApprovalReport} /> :
+                <p className="text-xs text-[#62657A] p-3 bg-white border border-[#DDE0EA] rounded-[10px]">{approvalAiError||'Đang lấy phân tích Gemini từ máy chủ…'} {approvalAiError && <button className="underline text-[#5540C7]" onClick={()=>{setApprovalAiError('');void aiReviewRequest(pr.id).then(setRealApprovalReport).catch(e=>setApprovalAiError(String(e.message||e)));}}>Thử lại</button>}</p>}
             </div>}
 
           {/* Tiến trình duyệt */}

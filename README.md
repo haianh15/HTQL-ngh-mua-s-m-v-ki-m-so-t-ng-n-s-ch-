@@ -1,70 +1,81 @@
-# Procure UI – Bản sửa lỗi prototype V2
+**V11.1:** Hỗ trợ khóa Supabase publishable/secret mới; xem `HUONG_DAN_V11_BACKEND.md`.
 
-Ứng dụng React + Vite + TypeScript, giao diện giữ theo Design System v1.0 của người dùng.
+# Procure UI V11 — Backend Gemini thực và xác thực Supabase
 
-## Chạy trên máy
+**TRẠNG THÁI:** Đã có mã backend và frontend tích hợp 4 lời gọi Gemini. Chưa triển khai hoặc xác nhận cuộc gọi thật vì chưa cấu hình dự án Supabase/Gemini của bạn. Kiểm thử API với dịch vụ giả lập: 15/15 đạt. `npm install` trong môi trường xây dựng bị timeout, nên chưa xác nhận Vite build hoàn chỉnh.
 
-Yêu cầu: Node.js 22 trở lên, npm và kết nối Internet để cài thư viện lần đầu.
+## 1. Có những gì?
+
+- `api/ai/check.js`: Gemini rà soát phiếu, đối chiếu đề nghị tương tự ở Supabase theo chi nhánh/phòng ban. Nhân viên **không được nhận ID, tên, số tiền** của đề nghị người khác, chỉ nhận cảnh báo chung.
+- `api/ai/assist.js`: Gemini gợi ý viết mục đích và thông số; không tự lưu vào phiếu.
+- `api/ai/approval.js`: Gemini tóm tắt phiếu với kiểm tra quyền ở máy chủ; cấm người tạo tự đánh giá phê duyệt.
+- `api/ai/budget.js`: Gemini phân tích ảnh chụp số liệu ngân sách; chỉ Tài chính/Ban Giám đốc. Không suy đoán xu hướng nếu chưa đủ dữ liệu lịch sử.
+- `api/ai/sync-request.js`: người tạo chủ động gửi bản chụp nội dung phiếu lên bảng AI để tìm trùng và tóm tắt; bảng này **không phải dữ liệu nghiệp vụ chính thức**.
+- `api/ai/sync-budgets.js`: Tài chính chủ động đồng bộ ảnh chụp ngân sách thuộc chi nhánh của mình. Không cập nhật ngân sách chính thức.
+- `api/ai/me.js`: xác minh token và lấy vai trò, chi nhánh, phòng ban từ **Supabase**.
+- `api/health.js`: kiểm tra API đã có biến môi trường hay chưa (chỉ bool, không hiển thị khóa).
+- `server/lib/`: kiểm tra quyền, hạn mức gọi API, dữ liệu đầu vào và gọi Gemini; không nằm dưới api/ nên không bị coi là endpoint.
+- `database/supabase_ai.sql`: bảng profile, bản chụp đề nghị, bản chụp ngân sách và giới hạn 10 yêu cầu/người/phút.
+
+## 2. Cấu hình trước khi dùng (bắt buộc)
+
+1. Tạo **Supabase Project** tại https://supabase.com. Vào **SQL Editor**, chạy toàn bộ `database/supabase_ai.sql`.
+2. Vào **Authentication → Users**, tạo người dùng bằng email thật mà bạn kiểm soát và mật khẩu riêng; không dùng mật khẩu demo chung.
+3. Gán user Supabase vừa tạo vào `public.procure_ai_profiles`. Ví dụ sau khi thay email và vai trò phù hợp:
+
+```sql
+insert into public.procure_ai_profiles
+(auth_uid,user_code,email,display_name,role,branch_id,department_id,active)
+select id,'usr_requester',email,'Nguyễn Minh Anh','requester','HQ','DEP_PROD_HQ',true
+from auth.users where email='minhanh.nguyen@procure.vn';
+```
+
+**Lưu ý:** email trong dữ liệu mẫu `@procure.vn` chỉ là giả định. Bạn phải tạo user đó trong Supabase Auth trước, hoặc thay bằng email do mình kiểm soát. Với vai trò Tài chính, tạo ít nhất 2 tài khoản độc lập nếu cần kiểm soát không tự duyệt.
+
+4. Lấy **Gemini API key** tại https://aistudio.google.com (có thể phát sinh chi phí theo hạn mức). API key chỉ lưu vào Environment Variables của Vercel, không đưa vào GitHub.
+5. Trong **Vercel → Project → Settings → Environment Variables**, thêm 7 biến như mẫu `.env.example` (trên Vercel có thể dùng cùng giá trị cho `SUPABASE_URL` / `VITE_SUPABASE_URL`, và `SUPABASE_ANON_KEY` / `VITE_SUPABASE_ANON_KEY`).
+   - `SUPABASE_URL`, `SUPABASE_ANON_KEY`: máy chủ xác thực người dùng.
+   - `SUPABASE_SERVICE_ROLE_KEY`: khóa **bí mật, chỉ server**, tuyệt đối không đặt tiền tố `VITE_`.
+   - `GEMINI_API_KEY`: khóa **bí mật, chỉ server**, tuyệt đối không đặt tiền tố `VITE_`.
+   - `GEMINI_MODEL`: ví dụ `gemini-2.5-flash`, có thể thay bằng model hiện được tài khoản của bạn cấp quyền.
+   - `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`: thông tin công khai cho trình duyệt để đăng nhập Supabase.
+6. Đẩy các file lên nhánh GitHub `main` đang kết nối Vercel, giữ **Root Directory = `./`** và Framework Preset = **Vite**. Để Vercel build lại.
+7. Mở `https://<your-domain>/api/health`, cần `status:ok`, `modelConfigured:true`, `authConfigured:true`.
+8. Đăng nhập bằng tài khoản Supabase ở bước 2. Kiểm tra nút AI tại **Lập đề nghị**, **Chi tiết đề nghị** và **Quản lý ngân sách**.
+
+## 3. Phạm vi dữ liệu, phân quyền và nguyên tắc an toàn
+
+- Backend xác minh **Authorization Bearer** token với Supabase Auth rồi đọc `procure_ai_profiles` qua server; không tin `role` hoặc `branchId` do client gửi. Phân quyền 8 vai trò giữ nguyên, không có quyền truy cập dữ liệu toàn công ty trừ `bod`.
+- Nhân viên chỉ được xem/lập phiếu của mình ở màn hình; server chỉ trả dấu hiệu **có trùng**, không trả ID hoặc mô tả phiếu của đồng nghiệp.
+- Tài chính, Mua hàng, Kế toán theo chi nhánh, phòng ban theo quyền được cấp. Mua hàng không được dùng endpoint AI ngân sách.
+- API AI là **read-only đối với dữ liệu kinh doanh**. AI không thể duyệt, từ chối, đặt hàng, giữ tiền, chuyển tiền hoặc ghi chi phí.
+- Phần nội dung phiếu/nguồn gửi tới Gemini là dữ liệu được người dùng chủ động yêu cầu phân tích. **Không gửi tệp đính kèm, hóa đơn PDF, số tài khoản, mật khẩu hoặc service role key cho Gemini**.
+- API giới hạn 10 lượt/người/phút. Vẫn cần giám sát quota chi phí tại Google AI Studio và thiết lập chính sách bảo vệ dữ liệu doanh nghiệp.
+
+## 4. Giới hạn cần biết trước khi đưa vào doanh nghiệp
+
+1. Mã nguồn V10 dùng React state/localStorage cho nghiệp vụ; bản V11 **chưa chuyển toàn bộ hồ sơ, phê duyệt, ngân sách, sổ cái sang cơ sở dữ liệu giao dịch**. Các số tiền/nghiệp vụ hiển thị trên web vẫn demo, không an toàn cho quyết định chi tiền.
+2. Bản chụp dữ liệu trong `procure_ai_requests`/`procure_ai_budgets` nhằm cung cấp ngữ cảnh cho AI, do UI gửi lên; **không xác thực được trạng thái phê duyệt hay số dư chính thức**. Muốn dùng dữ liệu thật cần tích hợp backend quy trình mua sắm/ledger nguyên tử và migration dữ liệu.
+3. Hồ sơ mẫu có sẵn trên trình duyệt **không tự xuất hiện trong Supabase**. Chỉ các đề nghị được tạo/đồng bộ sau khi đăng nhập mới có thể được backend AI phát hiện và tóm tắt. Không tự động tải toàn bộ hồ sơ demo của người khác lên cơ sở dữ liệu.
+4. Đăng nhập mật khẩu được xác minh bởi Supabase. **MFA thực (TOTP/AAL2), đặt lại/đổi mật khẩu hoàn chỉnh, phân quyền quản trị người dùng tại máy chủ và kiểm thử xâm nhập vẫn cần triển khai** trước khi có dữ liệu thật. OTP `123456` demo cũ không được sử dụng cho API AI.
+5. Vercel Functions chỉ hoạt động khi deploy qua Vercel hoặc `vercel dev`. Chạy `npm run dev` chỉ khởi động Vite frontend, sẽ không phục vụ các endpoint trong `/api`.
+6. Không công bố website cho nhân viên thật trước khi hoàn thiện các mục bảo mật và dữ liệu nghiệp vụ trên.
+
+## 5. Kiểm thử
 
 ```bash
 npm install
-npm run dev
+npm run test:backend
+npm run test:logic
+npm run test:ai
+npm run build
 ```
 
-Mở `http://localhost:3000` trong trình duyệt. Build: `npm run build`.
+Kiểm thử backend mock API: **15/15 đạt** với Node.js 22. Các file TypeScript/TSX đã được kiểm tra cú pháp. Chưa chạy được `npm run build` vì môi trường biên soạn không tải được dependency npm, và chưa test kết nối tới Gemini/Supabase thật do thiếu credentials.
 
-Trên Windows có thể chạy `run_windows.bat` trong thư mục mã nguồn.
+## 6. Tham chiếu kỹ thuật
 
-## Tài khoản thử nghiệm
+- https://ai.google.dev/api/generate-content
+- https://supabase.com/docs/reference/javascript/auth-getuser
+- https://vercel.com/docs/frameworks/frontend/vite
 
-- Tài khoản: lựa chọn trong vùng “Thử nghiệm nhanh theo vai trò” tại trang đăng nhập.
-- Mật khẩu demo: `Procure@2026`.
-- Mã MFA demo: `123456` cho tài khoản cần MFA.
-- Không phải dịch vụ xác thực thật. Tài khoản mẫu chỉ nhằm kiểm thử giao diện.
-
-## Kiểm thử logic nghiệp vụ (không cần npm install)
-
-```bash
-node --test tests/finance.test.cjs
-```
-
-Bộ kiểm thử bao gồm: ngân sách 100/70/50, chuyển giữ→cam kết→sử dụng, kiểm tra giải phóng, chuyển nguồn, phân quyền phê duyệt, phạm vi chi nhánh và phiên bản hiệu lực. File JS tại `.test-build/` là phiên bản TypeScript đã biên dịch để thử offline.
-
-## Thay đổi chính
-
-- Đăng nhập mặc định bị đóng, mật khẩu demo và OTP demo phải khớp chính xác; hết phiên giao diện sau 30 phút không hoạt động.
-- Giới hạn dữ liệu hiển thị theo vai trò, đơn vị và chi nhánh; thay đổi vai trò yêu cầu đăng xuất.
-- Thêm lưu cục bộ dữ liệu demo trên localStorage, làm mới trang không mất ngay dữ liệu (không đồng bộ giữa máy).
-- Cho sửa/lưu/gửi lại bản nháp, tách bản sửa đổi chưa duyệt khỏi bản đã duyệt có hiệu lực.
-- Kiểm tra người phê duyệt đúng bước, không duyệt phiếu của chính mình, xét phạm vi ủy quyền.
-- Không tự giải phóng phần tiền mua chưa dùng: giữ lại đến khi Tài chính xác nhận.
-- Chặn đặt hàng/đối soát vượt cam kết, tái kiểm tra nguồn khi duyệt chuyển ngân sách.
-- Nhập CSV kế toán từ file thật, kiểm tra số hóa đơn trùng, mã PR và phần cam kết còn lại trước khi ghi nhận.
-- Báo cáo có thể tải CSV UTF-8 để mở trong Excel và in/lưu PDF bằng hộp thoại trình duyệt.
-- Tệp đính kèm mới có nội dung (data URL) lưu cục bộ với giới hạn 1 MB/tệp.
-- Các kịch bản trong UI được ghi đúng là mô phỏng, không mạo nhận kiểm thử tự động.
-
-## Giới hạn quan trọng
-
-**Đây vẫn là prototype dùng dữ liệu localStorage.** Không có cơ sở dữ liệu chung, không có xác thực/mã OTP gửi qua server, không có giao dịch giữ ngân sách nguyên tử đa người dùng. KHÔNG sử dụng dữ liệu thật hoặc triển khai vận hành doanh nghiệp. Muốn dùng thật cần bổ sung backend, lưu file server/object storage, authentication MFA và giao dịch ngân sách trong database.
-
-Xuất Excel `.xlsx` và nhập `.xlsx` chưa được hỗ trợ; bản hiện tại xuất/nhập **CSV**, có thể mở/chỉnh sửa bằng Excel. Chức năng đổi/khôi phục mật khẩu thật đang khóa để không báo sai là đã đổi. Một số cấu hình như phân bổ ngân sách đầu năm đầy đủ vẫn cần triển khai nghiệp vụ backend.
-
-**Lưu ý môi trường tạo bản sửa:** Không thể chạy Vite và kiểm thử browser E2E tại môi trường này do không tải được dependencies npm từ registry (DNS). Đã kiểm tra cú pháp 33 file TypeScript/TSX và chạy 8 bài test độc lập cho các quy tắc tài chính. Hãy chạy `npm install && npm run dev` trên máy có Internet để kiểm thử giao diện toàn luồng.
-
-## Bản cập nhật V3 — Quyền theo chức danh và khu vực (28/10/2026)
-
-Xem `PHAN_QUYEN_V3.md` để biết toàn bộ ma trận quyền. Điểm thay đổi chính:
-- Nhân viên đề nghị: vào `Đề nghị mua sắm` ngay sau login, không còn dashboard, ngân sách và báo cáo; chỉ xem phiếu của mình.
-- Trưởng phòng: vào `Hàng chờ phê duyệt`; xem phiếu thuộc phòng ban và các yêu cầu cần duyệt, không có dashboard toàn công ty.
-- Tài chính / Mua hàng / Kế toán: dashboard, hồ sơ và báo cáo của **khu vực được gán**. Tài khoản HQ không còn mặc định truy cập năm chi nhánh.
-- Giám đốc chi nhánh: chỉ vùng chi nhánh của mình.
-- Ban Giám đốc (`bod`): có thể xem toàn công ty và chọn bộ lọc HQ / 5 chi nhánh.
-- Quản trị viên: mặc định chỉ màn quản trị, danh sách người dùng khu vực mình quản lý; không có quyền xem ngân sách toàn công ty.
-- Khi người dùng truy cập trang không thuộc vai trò, router hiển thị 403 và dữ liệu danh sách cũng bị lọc theo vai trò.
-
-**Khác biệt quan trọng:** đây vẫn là bản React prototype dùng `localStorage` và tài khoản demo; backend production phải áp dụng cùng quy tắc trên mỗi API và chỉ trả về dữ liệu đúng khu vực. Không thể xem frontend là biện pháp bảo vệ dữ liệu an toàn.
-
-**Cập nhật GitHub bằng Windows:** giải nén ZIP, nhấp đúp `CAP_NHAT_GITHUB_WINDOWS.bat` (yêu cầu Git for Windows và quyền push). File thực hiện clone repository hiện có, chép mã nguồn mới rồi tạo commit trên nhánh `main`.
-
-**Kiểm tra logic:** `npm run test:logic`. **Chạy web:** `npm install`, `npm run dev`. **Build production:** `npm run build`.

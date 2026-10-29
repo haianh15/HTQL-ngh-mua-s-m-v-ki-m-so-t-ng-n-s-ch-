@@ -376,7 +376,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
         </header>
 
         <div role="status" className="px-4 lg:px-8 py-2 bg-[#FFF3D6] text-[#875000] text-xs border-b border-[#DDE0EA]">
-          <strong>CHẾ ĐỘ DEMO:</strong> Dữ liệu chỉ lưu trên trình duyệt này. Xác thực, MFA và ngân sách chưa được bảo vệ bằng máy chủ; không sử dụng dữ liệu doanh nghiệp thật.
+          <strong>CHẾ ĐỘ DEMO:</strong> Đăng nhập và API AI dùng máy chủ; dữ liệu mua sắm, giao dịch ngân sách trên giao diện vẫn là bản demo lưu cục bộ. MFA chưa được triển khai đầy đủ. Không nhập dữ liệu doanh nghiệp thật vào bản thử nghiệm.
         </div>
         {/* Content Wrapper (Max 1280px, padding 32px desktop, 16px mobile) */}
         <main className="flex-1 max-w-[1280px] w-full mx-auto p-4 sm:p-6 lg:p-8">

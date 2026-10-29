@@ -9,39 +9,22 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Button } from '../common/Button';
 import { Alert } from '../common/Alert';
-import { Eye, EyeOff, Lock, Mail, ShieldAlert, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, ShieldAlert } from 'lucide-react';
 
 export const LoginForm: React.FC = () => {
-  const { login, users, switchUserDemo, navigateTo } = useApp();
-  const [email, setEmail] = useState('minhanh.nguyen@procure.vn');
-  const [password, setPassword] = useState('Procure@2026');
+  const { login, navigateTo } = useApp();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage('');
-    setIsLoading(true);
-
-    setTimeout(() => {
-      const res = login(email, password);
-      setIsLoading(false);
-      if (!res.success) {
-        setErrorMessage(res.error || 'Đăng nhập không thành công.');
-        setPassword(''); // Bảo mật: xóa mật khẩu khi nhập sai
-      }
-    }, 400);
-  };
-
-  const handleSelectQuickUser = (userId: string) => {
-    const u = users.find((x) => x.id === userId);
-    if (u) {
-      setEmail(u.email);
-      setPassword('Procure@2026');
-      setErrorMessage('');
-    }
+  const handleSubmit = async(e: React.FormEvent) => {
+    e.preventDefault();setErrorMessage('');setIsLoading(true);
+    try {const res=await login(email,password);
+      if(!res.success){setErrorMessage(res.error||'Đăng nhập không thành công.');setPassword('');}
+    }catch{setErrorMessage('Không kết nối được dịch vụ đăng nhập.');}
+    finally{setIsLoading(false);}
   };
 
   return (
@@ -133,18 +116,6 @@ export const LoginForm: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-1">
-              <label className="flex items-center gap-2 cursor-pointer text-xs text-[#62657A]">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded border-[#DDE0EA] text-[#5540C7] focus:ring-[#5540C7]"
-                />
-                <span>Chỉ ghi nhớ dữ liệu demo, không lưu phiên đăng nhập</span>
-              </label>
-            </div>
-
             <Button
               type="submit"
               variant="primary"
@@ -155,68 +126,8 @@ export const LoginForm: React.FC = () => {
             </Button>
           </form>
 
-          <div className="text-xs rounded-[10px] bg-[#FFF3D6] text-[#875000] p-3 mt-4">
-            <strong>Bản thử nghiệm cục bộ:</strong> Các tài khoản demo dùng chung mật khẩu <code>Procure@2026</code>. Đây không phải đăng nhập có xác thực máy chủ.
-          </div>
-          {/* Quick Demo Selector for Reviewers */}
-          <div className="mt-8 pt-6 border-t border-[#DDE0EA]">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-[#5540C7] uppercase tracking-wider mb-2.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Thử nghiệm nhanh theo vai trò (Demo Switcher):</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => handleSelectQuickUser('usr_requester')}
-                className="text-left p-2 rounded-[8px] bg-[#F7F8FC] hover:bg-[#F0EDFF] border border-[#DDE0EA] hover:border-[#5540C7] transition-all"
-              >
-                <div className="font-semibold text-[#202039]">Nguyễn Minh Anh</div>
-                <div className="text-[11px] text-[#62657A]">Nhân viên đề nghị</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectQuickUser('usr_dept_head')}
-                className="text-left p-2 rounded-[8px] bg-[#F7F8FC] hover:bg-[#F0EDFF] border border-[#DDE0EA] hover:border-[#5540C7] transition-all"
-              >
-                <div className="font-semibold text-[#202039]">Trần Văn Bình (MFA)</div>
-                <div className="text-[11px] text-[#62657A]">Trưởng phòng duyệt</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectQuickUser('usr_finance')}
-                className="text-left p-2 rounded-[8px] bg-[#F7F8FC] hover:bg-[#F0EDFF] border border-[#DDE0EA] hover:border-[#5540C7] transition-all"
-              >
-                <div className="font-semibold text-[#202039]">Phạm Hoàng Dũng (MFA)</div>
-                <div className="text-[11px] text-[#62657A]">Tài chính ngân sách</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectQuickUser('usr_procurement')}
-                className="text-left p-2 rounded-[8px] bg-[#F7F8FC] hover:bg-[#F0EDFF] border border-[#DDE0EA] hover:border-[#5540C7] transition-all"
-              >
-                <div className="font-semibold text-[#202039]">Hoàng Thị Mai</div>
-                <div className="text-[11px] text-[#62657A]">Phòng Mua hàng</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectQuickUser('usr_accountant')}
-                className="text-left p-2 rounded-[8px] bg-[#F7F8FC] hover:bg-[#F0EDFF] border border-[#DDE0EA] hover:border-[#5540C7] transition-all"
-              >
-                <div className="font-semibold text-[#202039]">Đỗ Quang Huy</div>
-                <div className="text-[11px] text-[#62657A]">Kế toán đối soát</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSelectQuickUser('usr_bod')}
-                className="text-left p-2 rounded-[8px] bg-[#F7F8FC] hover:bg-[#F0EDFF] border border-[#DDE0EA] hover:border-[#5540C7] transition-all"
-              >
-                <div className="font-semibold text-[#202039]">Vũ Đình Trọng (MFA)</div>
-                <div className="text-[11px] text-[#62657A]">Ban Giám đốc (BOD)</div>
-              </button>
-            </div>
-            <div className="mt-3 text-[11px] text-[#62657A] italic text-center">
-              * Mật khẩu demo chung cho tất cả tài khoản: <code className="bg-[#EFF0F5] px-1 py-0.5 rounded">Procure@2026</code>
-            </div>
+          <div className="text-xs rounded-[10px] bg-[#EBF2FF] text-[#2459AB] p-3 mt-4">
+            <strong>Đăng nhập máy chủ:</strong> Dùng tài khoản đã được tạo trong Supabase Auth và được gán quyền tại bảng <code>procure_ai_profiles</code>. Mật khẩu demo cũ không còn hoạt động.
           </div>
         </div>
       </div>

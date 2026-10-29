@@ -8,6 +8,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { analyzeBudgets } from '../ai/insights';
 import { InsightCard } from '../components/ai/InsightCard';
+import { aiAnalyzeBudgets, aiSyncBudgets } from '../services/aiApi';
+import type { InsightReport } from '../ai/insights';
 import { useApp } from '../context/AppContext';
 import { formatVND } from '../utils/formatters';
 import { heldForRequest, canManageBudget } from '../domain/rules';
@@ -80,6 +82,16 @@ export const BudgetManagementView: React.FC = () => {
       ledgerEntries.filter(e=>authorizedBudgetIds.has(e.budgetId)),
       purchaseRequests.filter(pr=>authorizedBudgetIds.has(pr.budgetId)));
   }, [budgetPools, currentBranchScope, ledgerEntries, purchaseRequests]);
+  const [serverBudgetReport,setServerBudgetReport]=useState<InsightReport|null>(null);
+  const [budgetAILoading,setBudgetAILoading]=useState(false);
+  const runBudgetAI = async()=>{
+    setBudgetAILoading(true);
+    try {
+      if(canManageBudget(currentUser)) await aiSyncBudgets(filteredBudgets);
+      const result=await aiAnalyzeBudgets();setServerBudgetReport(result);
+    }catch(e){addToast(e instanceof Error?e.message:'Không truy cập được AI ngân sách.','error');}
+    finally{setBudgetAILoading(false);}
+  };
   const financeCanRelease = canManageBudget(currentUser);
   // Only requests that were actually taken up by purchasing and have an
   // uncommitted balance can be reviewed for release. Confirmation is manual
@@ -211,7 +223,13 @@ export const BudgetManagementView: React.FC = () => {
       {/* Tab 1: Tổng quan nguồn ngân sách */}
       {activeTab === 'OVERVIEW' && (
         <div className="space-y-6">
-          <InsightCard title="Phân tích ngân sách & cảnh báo bất thường" report={aiBudgetReport} />
+          <div className="space-y-2">
+            <button type="button" disabled={budgetAILoading} className="bg-[#5540C7] text-white text-xs font-semibold px-4 py-2 rounded-[10px] disabled:opacity-60" onClick={()=>void runBudgetAI()}>
+              {budgetAILoading?'Đang phân tích…':'Phân tích ngân sách bằng AI Gemini'}
+            </button>
+            <p className="text-[11px] text-[#62657A]">Tài chính: nút này đồng bộ ảnh chụp ngân sách demo của khu vực lên Supabase để AI phân tích. Không tạo bút toán hoặc thay số dư chính thức. Ban Giám đốc: đọc số liệu đã đồng bộ.</p>
+            <InsightCard title="Phân tích ngân sách & cảnh báo bất thường" report={serverBudgetReport||aiBudgetReport}/>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredBudgets.map((b) => {
               const currentLimit = b.allocated + (b.adjustments || 0);

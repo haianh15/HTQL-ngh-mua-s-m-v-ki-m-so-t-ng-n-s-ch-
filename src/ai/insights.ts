@@ -7,7 +7,7 @@ import type { BudgetLedgerEntry, BudgetPool, PRAttachment, PRItem, PurchaseReque
 
 export type InsightLevel = 'warning' | 'info' | 'success';
 export interface Insight { code: string; level: InsightLevel; title: string; explanation: string; }
-export interface InsightReport { headline: string; details: string[]; insights: Insight[]; limitations: string; }
+export interface InsightReport { headline: string; details: string[]; insights: Insight[]; limitations: string; source?: 'gemini' | 'none'; }
 export interface DraftInput {
   title: string;
   purpose: string;

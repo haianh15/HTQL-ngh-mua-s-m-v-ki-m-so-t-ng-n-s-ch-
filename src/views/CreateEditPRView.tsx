@@ -9,6 +9,7 @@ import { isRequesterRole } from '../domain/rules';
 import { analyzeDraft, suggestDraftWording } from '../ai/insights';
 import type { DraftInput, InsightReport, WritingSuggestion } from '../ai/insights';
 import { InsightCard } from '../components/ai/InsightCard';
+import { aiCheckDraft, aiAssistDraft, aiSyncRequest } from '../services/aiApi';
 import { useApp } from '../context/AppContext';
 import { PRItem, PRAttachment } from '../types';
 import { formatVND } from '../utils/formatters';
@@ -71,6 +72,8 @@ export const CreateEditPRView: React.FC = () => {
     if (!pendingDetailId || !purchaseRequests.some((pr) =>
       pr.id === pendingDetailId && pr.createdById === currentUser?.id
     )) return;
+    const saved=purchaseRequests.find(p=>p.id===pendingDetailId);
+    if(saved)void aiSyncRequest(saved).catch(()=>addToast('Đề nghị đã lưu trong trình duyệt nhưng chưa đồng bộ vào dữ liệu AI. Người duyệt chưa thể dùng chức năng tóm tắt AI cho phiếu này.', 'warning'));
     setPendingDetailId(null);
     navigateTo('PR_DETAIL', pendingDetailId);
   }, [pendingDetailId, purchaseRequests, currentUser?.id, navigateTo]);
@@ -190,7 +193,7 @@ export const CreateEditPRView: React.FC = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (isDraft = false, acknowledgedAiWarning = false) => {
+  const handleSubmit = async (isDraft = false, acknowledgedAiWarning = false) => {
     if (!isDraft && !validate()) {
       addToast('Vui lòng kiểm tra lại các trường thông tin có lỗi bên dưới.', 'error');
       return;
@@ -198,7 +201,12 @@ export const CreateEditPRView: React.FC = () => {
     if (!isDraft) {
       // Mỗi lần gửi đều kiểm tra trên dữ liệu hiện tại; AI không sửa nghiệp vụ và không tự từ chối.
       const snapshot = currentDraftForAI();
-      const report = analyzeDraft(snapshot, purchaseRequests);
+      let report: InsightReport;
+      try {report=await aiCheckDraft(snapshot);}catch(e){
+        addToast(e instanceof Error?e.message:'Không kết nối được Gemini. Vui lòng thử lại.', 'error');
+        // AI là gợi ý; khi không kết nối được vẫn dùng quy tắc demo, ghi rõ nguồn.
+        report=analyzeDraft(snapshot, purchaseRequests);
+      }
       setAiCheckResult(report);
       const fingerprint = JSON.stringify(snapshot);
       const hasWarnings = report.insights.some(item => item.level === 'warning');
@@ -481,10 +489,10 @@ export const CreateEditPRView: React.FC = () => {
         {/* AI: không đọc dữ liệu ngoài quyền, không quyết định thay người sử dụng. */}
         <section className="mb-6 bg-[#F7F8FC] border border-[#DDE0EA] rounded-[16px] p-4 sm:p-5 space-y-3">
           <h2 className="font-bold text-base text-[#202039] flex items-center gap-2">Trợ lý kiểm tra và soạn đề nghị</h2>
-          <p className="text-xs text-[#62657A]">Bản demo phân tích theo quy tắc, chưa kết nối mô hình AI. Chỉ so sánh hồ sơ được phép xem; không gửi dữ liệu ra bên ngoài.</p>
+          <p className="text-xs text-[#62657A]">AI Gemini được gọi qua backend có đăng nhập và phân quyền. Nội dung đề nghị được gửi tới dịch vụ AI khi bạn bấm phân tích; không tự duyệt hay thay đổi ngân sách. Nếu mất kết nối, kết quả thay thế sẽ ghi rõ là demo quy tắc.</p>
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setAiCheckResult(analyzeDraft(currentDraftForAI(), purchaseRequests))}>Kiểm tra đề nghị</Button>
-            <Button variant="secondary" onClick={() => setWritingSuggestion(suggestDraftWording(currentDraftForAI(), currentUser?.departmentName || 'đơn vị'))}>Gợi ý viết mục đích / thông số</Button>
+            <Button variant="secondary" onClick={() => {void aiCheckDraft(currentDraftForAI()).then(setAiCheckResult).catch(e=>addToast(e instanceof Error?e.message:'Lỗi AI', 'error'));}}>Kiểm tra đề nghị</Button>
+            <Button variant="secondary" onClick={() => {void aiAssistDraft(currentDraftForAI()).then(setWritingSuggestion).catch(e=>addToast(e instanceof Error?e.message:'Lỗi AI', 'error'));}}>Gợi ý viết mục đích / thông số</Button>
           </div>
           {aiCheckResult && <InsightCard title="Kết quả kiểm tra đề nghị" report={aiCheckResult} />}
           {awaitingAiAcknowledgement && <div className="bg-[#FFF3D6] border border-[#EEDCA4] rounded-[10px] p-3 space-y-2">

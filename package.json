@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "procure-ui-ai-backend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,7 +10,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test:logic": "tsc --outDir .test-build --module commonjs --target es2020 --esModuleInterop --moduleResolution node --noEmit false src/domain/rules.ts src/types/index.ts && node -e \"require('fs').writeFileSync('.test-build/package.json', JSON.stringify({type:'commonjs'}))\" && node --test tests/finance.test.cjs",
-    "test:ai": "tsc --outDir .ai-build --module commonjs --target es2020 --esModuleInterop --moduleResolution node --noEmit false src/ai/insights.ts src/types/index.ts && node -e \"require('fs').writeFileSync('.ai-build/package.json', JSON.stringify({type:'commonjs'}))\" && node --test tests/ai-assist.test.cjs"
+    "test:ai": "tsc --outDir .ai-build --module commonjs --target es2020 --esModuleInterop --moduleResolution node --noEmit false src/ai/insights.ts src/types/index.ts && node -e \"require('fs').writeFileSync('.ai-build/package.json', JSON.stringify({type:'commonjs'}))\" && node --test tests/ai-assist.test.cjs",
+    "test:backend": "node --test tests/backend.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

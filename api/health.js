@@ -1,0 +1,1 @@
+export default function handler(req,res) {res.setHeader('Cache-Control','no-store');return res.status(200).json({status:'ok',service:'Procure UI AI backend',modelConfigured:!!process.env.GEMINI_API_KEY,authConfigured:!!(process.env.SUPABASE_URL&&process.env.SUPABASE_ANON_KEY&&process.env.SUPABASE_SERVICE_ROLE_KEY)});}

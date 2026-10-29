@@ -34,6 +34,7 @@ import {
   INITIAL_AUDIT_LOGS,
 } from '../data/initialData';
 import { ToastMessage } from '../components/common/Toast';
+import { signInReal, signOutReal, restoreRealUser, clearAuth } from '../services/aiApi';
 import { DEMO_PASSWORD, DEMO_OTP, availableBudget, canSeeBranch, canApproveStep, canViewAllRegions, canReadRequest, canAccessScreen, defaultScreenFor, isValidPRItems, isValidAmount, reserveBudget, commitBudget, recognizeExpense, releaseHold, transferBudget, heldForRequest, isRequesterRole, primaryRole, canReadBudget, canSeeFinancialFigures, canManageBudget, canExecutePurchase, canReconcile, canManageUsers, buildApprovalTimeline, statusForApprovalStep } from '../domain/rules';
 
 interface AppContextType {
@@ -67,7 +68,7 @@ interface AppContextType {
   setBranchScope: (scope: BranchCode | 'ALL') => void;
 
   // Auth actions
-  login: (email: string, password: string) => { success: boolean; requiresMfa?: boolean; error?: string };
+  login: (email: string, password: string) => Promise<{ success: boolean; requiresMfa?: boolean; error?: string }>;
   verifyMfa: (code: string) => boolean;
   logout: () => void;
   switchUserDemo: (userId: string) => void;
@@ -186,6 +187,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (Date.now() - activityAt >= 30 * 60 * 1000) {
         setCurrentUser(null); setIsAuthenticated(false); setMfaPendingUser(null);
         setIsSessionExpired(true); setActiveScreen('AUTH_LOGIN');
+        void signOutReal();
       }
     }, 30_000);
     return () => {
@@ -277,61 +279,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Auth Operations
-  const login = (email: string, password: string) => {
-    const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (!user) {
-      return { success: false, error: 'Email hoặc mật khẩu không chính xác.' };
-    }
-    if (!user.isActive) {
-      return { success: false, error: 'Tài khoản đã bị vô hiệu hóa bởi Quản trị viên.' };
-    }
-    // DEMO ONLY: fixed credential, not a real authentication service.
-    if (password !== DEMO_PASSWORD) {
-      return { success: false, error: 'Email hoặc mật khẩu không chính xác.' };
-    }
-
-    if (user.requiresMfa) {
-      setMfaPendingUser(user);
-      setActiveScreen('AUTH_MFA');
-      return { success: true, requiresMfa: true };
-    }
-
-    setCurrentUser(user);
-    setIsSessionExpired(false);
+  // Đăng nhập thực qua Supabase Auth; quyền lấy lại từ server /api/ai/me.
+  // Toàn bộ nghiệp vụ tài chính hiện vẫn là DEMO frontend, tuyệt đối không dùng số liệu thật.
+  const acceptVerifiedUser = (serverUser: User) => {
+    const known=users.find(u=>u.id===serverUser.id);
+    const verified={...serverUser,departmentName:known?.departmentName||serverUser.departmentId,title:known?.title||serverUser.roles[0]};
+    setCurrentUser(verified);
     setIsAuthenticated(true);
-    setMfaPendingUser(null);
-    setCurrentBranchScope(canViewAllRegions(user) ? 'ALL' : user.branchId);
-    setActiveScreen(defaultScreenFor(user));
-    addAuditLog('USER_LOGIN', 'USER', user.id, `Đăng nhập thành công (${user.name})`);
-    addToast(`Chào mừng ${user.name} đã quay trở lại hệ thống Procure UI`, 'success');
-    return { success: true, requiresMfa: false };
-  };
-
-  const verifyMfa = (code: string) => {
-    if (!mfaPendingUser) return false;
-    if (code.trim() !== DEMO_OTP) return false;
-
-    setCurrentUser(mfaPendingUser);
     setIsSessionExpired(false);
-    setIsAuthenticated(true);
     setMfaPendingUser(null);
-    setCurrentBranchScope(canViewAllRegions(mfaPendingUser) ? 'ALL' : mfaPendingUser.branchId);
-    setActiveScreen(defaultScreenFor(mfaPendingUser));
-    addAuditLog('USER_MFA_VERIFIED', 'USER', mfaPendingUser.id, 'Xác thực OTP/MFA 6 chữ số thành công');
-    addToast(`Xác thực bổ sung thành công. Chào mừng ${mfaPendingUser.name}!`, 'success');
-    return true;
+    setCurrentBranchScope(canViewAllRegions(verified)?'ALL':verified.branchId);
+    setActiveScreen(defaultScreenFor(verified));
   };
-
+  useEffect(()=>{
+    let active=true;
+    restoreRealUser().then(user=>{if(active)acceptVerifiedUser(user);}).catch(()=>{ /* Không có phiên; hiển thị đăng nhập */ });
+    return ()=>{active=false;};
+  },[]);
+  const login = async(email: string, password: string) => {
+    try {
+      const u=await signInReal(email,password);
+      acceptVerifiedUser(u);
+      addToast(`Đã xác thực tài khoản ${u.name} trên máy chủ.`, 'success');
+      return {success:true,requiresMfa:false};
+    } catch(e) {return {success:false,error:e instanceof Error?e.message:'Đăng nhập thất bại.'};}
+  };
+  // Không còn dùng OTP cố định 123456. MFA thực phải cấu hình với Supabase Auth.
+  const verifyMfa = (_code: string) => false;
   const logout = () => {
-    if (currentUser) {
-      addAuditLog('USER_LOGOUT', 'USER', currentUser.id, `Đăng xuất khỏi hệ thống (${currentUser.name})`);
-    }
-    setCurrentUser(null);
-    setIsAuthenticated(false);
-    setMfaPendingUser(null);
-    setSelectedPrId(null);
-    setActiveScreen('AUTH_LOGIN');
-    addToast('Đã đăng xuất an toàn. Phiên làm việc đã bị hủy.', 'info');
+    void signOutReal();
+    setCurrentUser(null);setIsAuthenticated(false);setMfaPendingUser(null);
+    setSelectedPrId(null);setActiveScreen('AUTH_LOGIN');
+    addToast('Đã đăng xuất khỏi phiên AI có xác thực.', 'info');
   };
 
   const switchUserDemo = (_userId: string) => {
