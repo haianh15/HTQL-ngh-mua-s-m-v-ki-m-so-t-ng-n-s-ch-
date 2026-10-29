@@ -31,7 +31,12 @@ export function eligibleDelegation(user: User, pr: PurchaseRequest, role: string
     return parts.length === 3 ? `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}` : d.slice(0,10);
   };
   const today = at.toISOString().slice(0,10);
+  const step = pr.approvalTimeline[pr.currentStepIndex];
+  if (!step || step.assignedRole !== role) return false;
   return ds.some(d => d.isActive && d.toUserId === user.id && d.role === role &&
+    // Ủy quyền phải đúng từ người được phân công phiếu này, không phải bất kỳ ai cùng vai trò.
+    (step.assignedToUserId ? d.fromUserId === step.assignedToUserId :
+      !!step.assignedToName && d.fromUserName?.trim() === step.assignedToName.trim()) &&
     dateKey(d.startDate) <= today && dateKey(d.endDate) >= today &&
     (!d.scopeBranchId || d.scopeBranchId === pr.branchId) &&
     (!d.scopeDeptId || d.scopeDeptId === pr.departmentId) &&
@@ -42,8 +47,18 @@ export function canApproveStep(user: User | null, pr: PurchaseRequest, ds: Deleg
   if (!['PENDING_DEPT','PENDING_FINANCE','PENDING_FINAL'].includes(pr.status)) return false;
   const step = pr.approvalTimeline[pr.currentStepIndex];
   if (!step || step.status !== 'PENDING') return false;
+  // Không cho tất cả người giữ cùng vai trò xem/duyệt một hồ sơ được giao cho người khác.
+  // Với dữ liệu cũ chưa có ID, chỉ chấp nhận tên đã phân công; không phân công thì không mở rộng quyền.
+  const assignedToMe = step.assignedToUserId
+    ? step.assignedToUserId === user.id
+    : step.assignedToEmail
+      ? step.assignedToEmail.toLowerCase() === user.email?.toLowerCase()
+      : step.assignedToName
+        ? !step.assignedToName.includes('chờ phân công') &&
+          step.assignedToName.trim().toLocaleLowerCase('vi') === user.name?.trim().toLocaleLowerCase('vi')
+        : false; // Chưa có người được phân công thì không tự mở rộng quyền.
   const direct = primaryRole(user) === step.assignedRole &&
-    canSeeBranch(user,pr.branchId) &&
+    canSeeBranch(user,pr.branchId) && assignedToMe &&
     (step.assignedRole !== 'dept_head' || user.departmentId === pr.departmentId);
   return direct || eligibleDelegation(user, pr, step.assignedRole, ds);
 }
@@ -101,23 +116,18 @@ export function canSeeFinancialFigures(user: User | null): boolean {
 export function canReadBudget(user: User | null, budget: BudgetPool): boolean {
   return canSeeFinancialFigures(user) && canSeeBranch(user,budget.branchId);
 }
-export function canReadRequest(user: User | null, pr: PurchaseRequest): boolean {
-  const role=primaryRole(user);
-  if (!role || role==='admin') return false;
-  if (role==='requester') return pr.createdById === user!.id;
-  // Mọi tác nhân được phép lập phiếu đều xem lại được phiếu của chính mình,
-  // dù đang chờ trưởng phòng/Tài chính và chưa nằm trong luồng chuyên môn của họ.
-  if (pr.createdById === user!.id) return true;
-  // Bản nháp là dữ liệu riêng tư, không hiển thị cho trưởng phòng, tài chính hay lãnh đạo.
-  if (pr.status==='DRAFT' && pr.createdById!==user!.id) return false;
-  if (!canSeeBranch(user,pr.branchId)) return false;
-  if (role==='dept_head') return pr.departmentId === user!.departmentId;
-  // Mua hàng và kế toán chỉ cần xử lý các hồ sơ đã được duyệt; không xem bản nháp hoặc đơn đang chờ duyệt.
-  if (role==='procurement' || role==='accountant')
-    return ['APPROVED','IN_PROGRESS','COMPLETED'].includes(pr.status) ||
-      (pr.versions||[]).some(v=>v.isEffective && v.versionNumber===pr.effectiveVersion && pr.status!=='CANCELLED');
-  if (role==='finance' || role==='branch_director' || role==='bod')
-    return pr.status !== 'DRAFT' || pr.createdById === user!.id;
+/** Quyền xem đề nghị của người duyệt luôn đi cùng bước duyệt hiện tại, không theo chức vụ chung. */
+export function canReadRequest(user: User | null, pr: PurchaseRequest, delegations: Delegation[] = []): boolean {
+  const role = primaryRole(user);
+  if (!role || role === 'admin') return false;
+  if (pr.createdById === user!.id) return true; // Người tạo theo dõi phiếu của chính mình.
+  if (role === 'requester' || pr.status === 'DRAFT') return false;
+  if (!canSeeBranch(user, pr.branchId)) return false;
+  if (['dept_head', 'finance', 'branch_director', 'bod'].includes(role))
+    return canApproveStep(user, pr, delegations);
+  // Mua hàng, kế toán chỉ xử lý phiếu đã duyệt ở chi nhánh được phân công.
+  if (role === 'procurement' || role === 'accountant')
+    return ['APPROVED', 'IN_PROGRESS', 'COMPLETED'].includes(pr.status);
   return false;
 }
 /** Tuyến duyệt theo tác nhân lập phiếu. Không lặp bước Trưởng phòng cho cấp khác. */
@@ -136,14 +146,16 @@ export function buildApprovalTimeline(creator: User, amount: number, users: User
   if (role === 'requester') {
     const head = available('dept_head');
     steps.push({ step:'DEPT_CONFIRMATION', stepName:'Trưởng phòng xác nhận nhu cầu',
-      assignedRole:'dept_head', assignedToName:head?.name || 'Trưởng phòng (chờ phân công)', status:'PENDING' });
+      assignedRole:'dept_head', assignedToUserId:head?.id, assignedToEmail:head?.email,
+      assignedToName:head?.name || 'Trưởng phòng (chờ phân công)', status:'PENDING' });
   }
 
   const finance = available('finance');
   steps.push({ step:'FINANCE_CHECK', stepName: role === 'finance'
       ? 'Tài chính khác kiểm tra, duyệt đề nghị (không tự duyệt)'
       : 'Tài chính kiểm tra nguồn ngân sách',
-    assignedRole:'finance', assignedToName:finance?.name || 'Tài chính khu vực (chờ phân công)', status:'PENDING' });
+    assignedRole:'finance', assignedToUserId:finance?.id, assignedToEmail:finance?.email,
+    assignedToName:finance?.name || 'Tài chính khu vực (chờ phân công)', status:'PENDING' });
 
   // Ngưỡng duyệt cuối; dưới 10 triệu, phiếu do cấp khác lập kết thúc ở Tài chính,
   // không quay ngược lại Trưởng phòng. Phiếu nhân viên vẫn theo hạn mức BRD.
@@ -159,7 +171,7 @@ export function buildApprovalTimeline(creator: User, amount: number, users: User
       stepName: finalRole === 'bod' ? 'Ban Giám đốc phê duyệt'
         : finalRole === 'branch_director' ? 'Giám đốc chi nhánh / đơn vị phê duyệt'
         : 'Trưởng đơn vị phê duyệt theo hạn mức dưới 10 triệu',
-      assignedRole: finalRole,
+      assignedRole: finalRole, assignedToUserId: reviewer?.id, assignedToEmail: reviewer?.email,
       assignedToName: reviewer?.name || `${finalRole} (chờ phân công người khác)`,
       status:'PENDING' });
   }

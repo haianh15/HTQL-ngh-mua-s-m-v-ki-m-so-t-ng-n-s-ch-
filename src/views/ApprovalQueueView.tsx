@@ -11,7 +11,7 @@ import { formatVND, getPRStatusBadgeInfo } from '../utils/formatters';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { ConfirmDialog } from '../components/common/Modal';
-import { CheckSquare, Clock, ShieldCheck, UserCheck, Check, X, CornerDownLeft, Eye } from 'lucide-react';
+import { CheckSquare, Clock, UserCheck, Check, X, CornerDownLeft, Eye } from 'lucide-react';
 
 export const ApprovalQueueView: React.FC = () => {
   const {
@@ -24,7 +24,7 @@ export const ApprovalQueueView: React.FC = () => {
     addToast,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'PENDING_ME' | 'PROCESSED' | 'OVERDUE' | 'DELEGATED'>('PENDING_ME');
+  const [activeTab, setActiveTab] = useState<'PENDING_ME' | 'OVERDUE' | 'DELEGATED'>('PENDING_ME');
 
   // Dialog states for quick decision from queue
   const [targetPrId, setTargetPrId] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export const ApprovalQueueView: React.FC = () => {
   // Tab 1: Chờ tôi xử lý
   const pendingForMe = useMemo(() => {
     return purchaseRequests.filter((pr) => {
-      if (!canReadRequest(currentUser,pr) || !['PENDING_DEPT', 'PENDING_FINANCE', 'PENDING_FINAL'].includes(pr.status)) return false;
+      if (!canReadRequest(currentUser,pr,delegations) || !['PENDING_DEPT', 'PENDING_FINANCE', 'PENDING_FINAL'].includes(pr.status)) return false;
       const step = pr.approvalTimeline[pr.currentStepIndex];
       if (!step || step.status !== 'PENDING') return false;
 
@@ -52,14 +52,7 @@ export const ApprovalQueueView: React.FC = () => {
       // Quyền trực tiếp của vai trò
       return canApproveStep(currentUser, pr, delegations);
     });
-  }, [purchaseRequests, currentUser]);
-
-  // Tab 2: Đã xử lý bởi tôi
-  const processedByMe = useMemo(() => purchaseRequests.filter(pr =>
-    canReadRequest(currentUser,pr) && pr.approvalTimeline.some(step =>
-      step.status!=='PENDING' && (step.decidedBy===currentUser?.id || step.decidedByName===currentUser?.name)
-    )
-  ),[purchaseRequests,currentUser]);
+  }, [purchaseRequests, currentUser, delegations]);
 
   // Tab 3: Quá hạn / Cần ưu tiên (> 48h hoặc gần ngày cần)
   const overduePRs = useMemo(() => {
@@ -70,13 +63,13 @@ export const ApprovalQueueView: React.FC = () => {
       const created = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
       return Date.now() - created.getTime() > 3 * 24 * 60 * 60 * 1000;
     });
-  }, [purchaseRequests]);
+  }, [purchaseRequests, currentUser, delegations]);
 
   // Tab 4: Được ủy quyền
   const delegatedPRs = useMemo(() => {
     if (myDelegations.length === 0) return [];
     return purchaseRequests.filter((pr) => {
-      if (!canReadRequest(currentUser,pr) || !['PENDING_DEPT', 'PENDING_FINANCE', 'PENDING_FINAL'].includes(pr.status)) return false;
+      if (!canReadRequest(currentUser,pr,delegations) || !['PENDING_DEPT', 'PENDING_FINANCE', 'PENDING_FINAL'].includes(pr.status)) return false;
       const step = pr.approvalTimeline[pr.currentStepIndex];
       if (!step || step.status !== 'PENDING') return false;
 
@@ -86,20 +79,18 @@ export const ApprovalQueueView: React.FC = () => {
       // Khớp vai trò người ủy quyền
       return !!currentUser && eligibleDelegation(currentUser, pr, step.assignedRole, myDelegations);
     });
-  }, [purchaseRequests, myDelegations, currentUser]);
+  }, [purchaseRequests, myDelegations, currentUser, delegations]);
 
   const currentList = useMemo(() => {
     switch (activeTab) {
       case 'PENDING_ME':
         return pendingForMe;
-      case 'PROCESSED':
-        return processedByMe;
       case 'OVERDUE':
         return overduePRs;
       case 'DELEGATED':
         return delegatedPRs;
     }
-  }, [activeTab, pendingForMe, processedByMe, overduePRs, delegatedPRs]);
+  }, [activeTab, pendingForMe, overduePRs, delegatedPRs]);
 
   const handleQuickApprove = (prId: string) => {
     const pr = purchaseRequests.find((p) => p.id === prId);
@@ -178,22 +169,6 @@ export const ApprovalQueueView: React.FC = () => {
             }`}
           >
             {pendingForMe.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('PROCESSED')}
-          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'PROCESSED'
-              ? 'border-[#5540C7] text-[#5540C7]'
-              : 'border-transparent text-[#62657A] hover:text-[#202039]'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4" />
-          <span>Đã xử lý</span>
-          <span className="px-1.5 py-0.5 rounded-full text-[11px] bg-[#EFF0F5] text-[#62657A]">
-            {processedByMe.length}
           </span>
         </button>
 

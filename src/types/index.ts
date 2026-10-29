@@ -85,6 +85,7 @@ export interface ApprovalDecision {
   stepName: string;
   assignedRole: UserRole;
   assignedToName?: string;
+  assignedToUserId?: string; // Người duyệt được phân công chính thức
   assignedToEmail?: string;
   delegatedFromName?: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVISION_REQUESTED' | 'SKIPPED';

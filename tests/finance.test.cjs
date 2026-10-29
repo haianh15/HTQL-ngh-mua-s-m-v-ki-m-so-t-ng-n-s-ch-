@@ -42,7 +42,7 @@ test('Transfer must keep commitments and not exceed available',()=>{
 });
 test('Author cannot self-approve; wrong role and step rejected',()=>{
   const pr={createdById:'author',branchId:'HQ',departmentId:'D',status:'PENDING_DEPT',
-    currentStepIndex:0,totalAmount:5_000_000,approvalTimeline:[{status:'PENDING',assignedRole:'dept_head'}]};
+    currentStepIndex:0,totalAmount:5_000_000,approvalTimeline:[{status:'PENDING',assignedRole:'dept_head',assignedToUserId:'manager'}]};
   const author={id:'author',isActive:true,roles:['dept_head'],branchId:'HQ',departmentId:'D'};
   const manager={...author,id:'manager'};
   assert.equal(canApproveStep(author,pr,[]),false);
@@ -91,7 +91,7 @@ test('RBAC: department head sees own dept requests and approval queue but not da
   assert.equal(defaultScreenFor(u),'APPROVAL_QUEUE');
   assert.equal(canViewDashboard(u),false);
   assert.equal(canAccessScreen(u,'APPROVAL_QUEUE'),true);
-  assert.equal(canReadRequest(u,exampleRequest),true);
+  assert.equal(canReadRequest(u,exampleRequest),false); // No active approval step
   assert.equal(canReadRequest(u,{...exampleRequest,departmentId:'D2'}),false);
   assert.equal(canAccessScreen(u,'REPORTS'),false);
 });
@@ -100,7 +100,7 @@ test('RBAC: regional finance/procurement/accountant see dashboard for assigned r
     const u=staff(role);
     assert.equal(canViewDashboard(u),true,role);
     assert.equal(canAccessScreen(u,'DASHBOARD'),true,role);
-    assert.equal(canReadRequest(u,{...exampleRequest,status:'APPROVED',versions:[]}),true,role);
+    assert.equal(canReadRequest(u,{...exampleRequest,status:'APPROVED',versions:[]}),role !== 'finance',role);
     assert.equal(canReadRequest(u,{...exampleRequest,branchId:'BR_DN'}),false,role);
   }
 });
@@ -116,7 +116,7 @@ test('RBAC: branch director sees assigned branch, system admin only admin screen
 });
 
 test('RBAC: central HQ finance cannot approve request outside HQ, BOD can',()=>{
-  const pr={createdById:'author',branchId:'BR_DN',departmentId:'DN',status:'PENDING_FINANCE',currentStepIndex:0,totalAmount:15_000_000,approvalTimeline:[{status:'PENDING',assignedRole:'finance'}]};
+  const pr={createdById:'author',branchId:'BR_DN',departmentId:'DN',status:'PENDING_FINANCE',currentStepIndex:0,totalAmount:15_000_000,approvalTimeline:[{status:'PENDING',assignedRole:'finance',assignedToUserId:'finance'}]};
   assert.equal(canApproveStep(staff('finance','HQ','FIN'),pr,[]),false);
   assert.equal(canApproveStep(staff('finance','BR_DN','FIN'),pr,[]),true);
 });
@@ -220,7 +220,7 @@ test('V7: stale multirole requester/admin cannot inherit business permissions',(
  }
 });
 test('V7: only authorized approval step, no self approval or cross-department',()=>{
- const pr={...exampleRequest,createdById:'x',status:'PENDING_FINAL',currentStepIndex:0,approvalTimeline:[{status:'PENDING',assignedRole:'branch_director'}]};
+ const pr={...exampleRequest,createdById:'x',status:'PENDING_FINAL',currentStepIndex:0,approvalTimeline:[{status:'PENDING',assignedRole:'branch_director',assignedToUserId:'branch_director'}]};
  assert.equal(canApproveStep(staff('branch_director','BR_HCM'),pr,[]),true);
  assert.equal(canApproveStep(staff('dept_head','BR_HCM'),pr,[]),false);
  assert.equal(canApproveStep(staff('branch_director','BR_DN'),pr,[]),false);
@@ -295,4 +295,43 @@ test('V9: missing director in assigned branch escalates mid-tier approval to BOD
  const staffHq=[routeCreator('finance','fin','HQ'),routeCreator('finance','fin2','HQ'),routeCreator('bod','bod','HQ')];
  const plan=buildApprovalTimeline(routeCreator('finance','fin','HQ'),25_000_000,staffHq);
  assert.deepEqual(plan.map(x=>x.assignedRole),['finance','bod']);
+});
+
+// V12: strict per-assignee visibility. Higher roles do not see every PR in their branch.
+test('V12: Only assignee of active stage can read and approve the request',()=>{
+  const creator=routeCreator('requester','creator');
+  const owner=routeCreator('dept_head','manager');
+  const other=routeCreator('dept_head','other-head');
+  const steps=buildApprovalTimeline(creator,15_000_000,routeUsers);
+  const pr={...exampleRequest,branchId:'HQ',departmentId:'D',createdById:creator.id,status:'PENDING_DEPT',currentStepIndex:0,approvalTimeline:steps};
+  assert.equal(canReadRequest(owner,pr),true);
+  assert.equal(canApproveStep(owner,pr,[]),true);
+  assert.equal(canReadRequest(other,pr),false);
+  assert.equal(canApproveStep(other,pr,[]),false);
+  assert.equal(canReadRequest(routeCreator('finance','finance1'),pr),false);
+  assert.equal(canReadRequest(routeCreator('bod','bod1'),pr),false);
+  assert.equal(canReadRequest(creator,pr),true);
+  const atFinance={...pr,status:'PENDING_FINANCE',currentStepIndex:1};
+  assert.equal(canReadRequest(owner,atFinance),false);
+  assert.equal(canReadRequest(routeCreator('finance','finance1'),atFinance),true);
+  assert.equal(canReadRequest(routeCreator('finance','finance2'),atFinance),false);
+  const atFinal={...pr,status:'PENDING_FINAL',currentStepIndex:2};
+  assert.equal(canReadRequest(routeCreator('branch_director','director'),atFinal),true);
+  assert.equal(canReadRequest(routeCreator('finance','finance1'),atFinal),false);
+  assert.equal(canReadRequest(routeCreator('bod','bod1'),atFinal),false);
+  assert.equal(canReadRequest(owner,{...pr,status:'APPROVED'}),false);
+});
+test('V12: Valid delegation may read only a currently delegated step, and never own request',()=>{
+  const owner=routeCreator('dept_head','manager');
+  const delegator=routeCreator('requester','creator');
+  const beneficiary=routeCreator('finance','delegate');
+  const steps=buildApprovalTimeline(delegator,15_000_000,routeUsers);
+  const pr={branchId:'HQ',departmentId:'D',createdById:delegator.id,status:'PENDING_DEPT',currentStepIndex:0,approvalTimeline:steps};
+  const ds=[{fromUserId:owner.id,toUserId:beneficiary.id,role:'dept_head',isActive:true,startDate:'2020-01-01',endDate:'2099-12-31'}];
+  assert.equal(canReadRequest(beneficiary,pr,ds),true);
+  assert.equal(canReadRequest(beneficiary,pr,[]),false);
+  assert.equal(canReadRequest(beneficiary,pr,[{...ds[0],fromUserId:'unrelated-manager'}]),false);
+  assert.equal(canReadRequest(beneficiary,{...pr,status:'APPROVED'},ds),false);
+  assert.equal(canReadRequest({...beneficiary,id:delegator.id},pr,ds),true); // creator always sees own PR
+  assert.equal(canApproveStep({...beneficiary,id:delegator.id},pr,ds),false);
 });

@@ -5,7 +5,7 @@
  * Implements TO-BE 01, 02, 03, BR01-BR12, SRS 34 Use Cases + AUTH-01..07
  */
 
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import {
   User,
   BranchCode,
@@ -155,6 +155,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedPrId, setSelectedPrId] = useState<string | null>(null);
   const [currentBranchScope, setCurrentBranchScope] = useState<BranchCode | 'ALL'>('HQ');
   const [isSessionExpired, setIsSessionExpired] = useState<boolean>(false);
+  const authRevision = useRef(0);
 
   // Core Data
   const [budgetPools, setBudgetPools] = useState<BudgetPool[]>(() => {
@@ -202,7 +203,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     (['requester','dept_head'].includes(primaryRole(currentUser)||'') &&
       b.branchId===currentUser?.branchId && b.departmentId===currentUser?.departmentId) ||
     (primaryRole(currentUser)==='procurement' && b.branchId===currentUser?.branchId));
-  const permittedPRs = purchaseRequests.filter(pr => canReadRequest(currentUser, pr));
+  const permittedPRs = purchaseRequests.filter(pr => canReadRequest(currentUser, pr, delegations));
 
   // Toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -249,7 +250,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (isAuthenticated && (screen === 'PR_DETAIL' || screen === 'PR_EDIT')) {
       const targetId = prId ?? selectedPrId;
       const targetPR = purchaseRequests.find(p => p.id === targetId);
-      if (!targetPR || !canReadRequest(currentUser, targetPR) ||
+      if (!targetPR || !canReadRequest(currentUser, targetPR, delegations) ||
           (screen === 'PR_EDIT' && (targetPR.createdById !== currentUser?.id || targetPR.status !== 'DRAFT'))) {
         addToast(targetPR
           ? 'Bạn không có quyền truy cập đề nghị này.'
@@ -293,12 +294,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
   useEffect(()=>{
     let active=true;
-    restoreRealUser().then(user=>{if(active)acceptVerifiedUser(user);}).catch(()=>{ /* Không có phiên; hiển thị đăng nhập */ });
+    const revision=++authRevision.current;
+    restoreRealUser().then(user=>{
+      if(active && authRevision.current===revision) acceptVerifiedUser(user);
+    }).catch(()=>{ /* Không có phiên; hiển thị đăng nhập */ });
     return ()=>{active=false;};
   },[]);
   const login = async(email: string, password: string) => {
+    const revision=++authRevision.current;
     try {
       const u=await signInReal(email,password);
+      if(revision!==authRevision.current) return {success:false,error:'Phiên đăng nhập đã thay đổi.'};
       acceptVerifiedUser(u);
       addToast(`Đã xác thực tài khoản ${u.name} trên máy chủ.`, 'success');
       return {success:true,requiresMfa:false};
@@ -307,6 +313,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Không còn dùng OTP cố định 123456. MFA thực phải cấu hình với Supabase Auth.
   const verifyMfa = (_code: string) => false;
   const logout = () => {
+    ++authRevision.current;
     void signOutReal();
     setCurrentUser(null);setIsAuthenticated(false);setMfaPendingUser(null);
     setSelectedPrId(null);setActiveScreen('AUTH_LOGIN');

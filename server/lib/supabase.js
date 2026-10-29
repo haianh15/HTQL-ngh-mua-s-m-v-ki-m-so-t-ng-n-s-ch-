@@ -22,17 +22,27 @@ export async function requireIdentity(req) {
   if (!p || !p.active || p.email?.toLowerCase() !== auth.email.toLowerCase()) throw new ApiError('FORBIDDEN', 'Tài khoản chưa được phân vai trò hoặc đã khóa.', 403);
   return { authUid: auth.id, code:p.user_code, email:auth.email, name:p.display_name, role:p.role, branch:p.branch_id, dept:p.department_id };
 }
+/** Supabase AI snapshot is not the official approval ledger; restrict analysis by current stage. */
 export function canSeeRequest(identity, row) {
   if (identity.role === 'admin') return false;
   if (identity.role === 'requester') return row.owner_auth_uid === identity.authUid;
-  if (row.status === 'DRAFT' && row.owner_auth_uid !== identity.authUid) return false;
+  if (row.owner_auth_uid === identity.authUid) return true;
+  if (row.status === 'DRAFT') return false;
   if (identity.role !== 'bod' && identity.branch !== row.branch_id) return false;
-  if (identity.role === 'dept_head') return identity.dept === row.department_id;
-  if (['procurement','accountant'].includes(identity.role)) return ['APPROVED','IN_PROGRESS','COMPLETED'].includes(row.status);
-  return ['finance','branch_director','bod'].includes(identity.role);
+  if (identity.role === 'procurement' || identity.role === 'accountant')
+    return ['APPROVED','IN_PROGRESS','COMPLETED'].includes(row.status);
+  if (identity.role === 'dept_head')
+    return identity.dept === row.department_id && (row.status === 'PENDING_DEPT' ||
+      (row.status === 'PENDING_FINAL' && Number(row.amount) < 10_000_000));
+  if (identity.role === 'finance') return row.status === 'PENDING_FINANCE';
+  if (identity.role === 'branch_director') return row.status === 'PENDING_FINAL' &&
+    Number(row.amount) >= 10_000_000 && Number(row.amount) < 50_000_000;
+  if (identity.role === 'bod') return row.status === 'PENDING_FINAL' && Number(row.amount) >= 50_000_000;
+  return false;
 }
 export function canAnalyzeApproval(identity, row) {
-  return ['dept_head','finance','branch_director','bod'].includes(identity.role) && row.owner_auth_uid !== identity.authUid && canSeeRequest(identity,row);
+  return ['dept_head','finance','branch_director','bod'].includes(identity.role) &&
+    row.owner_auth_uid !== identity.authUid && canSeeRequest(identity,row);
 }
 export function canSeeBudgets(identity) { return ['finance','bod'].includes(identity.role); }
 export async function table(name, query = {}, {method='GET', body, upsert=false} = {}) {

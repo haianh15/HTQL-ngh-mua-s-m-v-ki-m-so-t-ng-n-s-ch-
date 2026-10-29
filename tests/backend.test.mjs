@@ -12,7 +12,7 @@ test('Không lộ bản nháp của người khác cho Tài chính',()=>{assert.
 test('Nhân viên chỉ được xem phiếu mình tạo',()=>{assert.equal(canSeeRequest(requester,{branch_id:'HQ',status:'PENDING_DEPT',owner_auth_uid:'different'}),false);assert.equal(canSeeRequest(requester,{branch_id:'HQ',status:'PENDING_DEPT',owner_auth_uid:requester.authUid}),true);});
 test('Trưởng phòng chỉ được xem yêu cầu phòng mình',()=>{assert.equal(canSeeRequest(user('dept_head'),{branch_id:'HQ',department_id:'OTHER',status:'PENDING_DEPT',owner_auth_uid:'any'}),false);});
 test('Tài chính và Mua hàng không xem chi nhánh khác',()=>{for(const role of ['finance','procurement','accountant']) assert.equal(canSeeRequest(user(role),{branch_id:'BR_HCM',department_id:'IT',status:'APPROVED',owner_auth_uid:'none'}),false);});
-test('Ban Giám đốc xem chi nhánh khác nhưng không xem bản nháp riêng tư',()=>{assert.equal(canSeeRequest(user('bod'),{branch_id:'BR_HCM',status:'APPROVED',owner_auth_uid:'other'}),true);assert.equal(canSeeRequest(user('bod'),{branch_id:'BR_HCM',status:'DRAFT',owner_auth_uid:'other'}),false);});
+test('Ban Giám đốc chỉ xem đơn đang chờ đến lượt BOD',()=>{assert.equal(canSeeRequest(user('bod'),{branch_id:'BR_HCM',status:'APPROVED',owner_auth_uid:'other'}),false);assert.equal(canSeeRequest(user('bod'),{branch_id:'BR_HCM',status:'DRAFT',owner_auth_uid:'other'}),false);assert.equal(canSeeRequest(user('bod'),{branch_id:'BR_HCM',status:'PENDING_FINAL',amount:50_000_000,owner_auth_uid:'other'}),true);assert.equal(canSeeRequest(user('bod'),{branch_id:'BR_HCM',status:'PENDING_FINANCE',amount:50_000_000,owner_auth_uid:'other'}),false);});
 test('Người lập không thể yêu cầu AI đánh giá phê duyệt phiếu của mình',()=>{assert.equal(canAnalyzeApproval(finance,{branch_id:'HQ',department_id:'IT',status:'PENDING_FINANCE',owner_auth_uid:finance.authUid}),false);});
 test('Chỉ Tài chính và BOD phân tích ngân sách',()=>{assert.equal(canSeeBudgets(requester),false);assert.equal(canSeeBudgets(finance),true);assert.equal(canSeeBudgets(user('bod')),true);});
 test('Công thức ngân sách không trừ tiền hai lần',()=>{const [b]=financialFacts([{budget_id:'B',name:'B',branch_id:'HQ',allocated:100000000,adjustments:0,held:30000000,committed:20000000,used:10000000}]);assert.equal(b.available,40000000);});
@@ -55,4 +55,15 @@ test('Supabase secret key mới chỉ gửi apikey, không gửi Bearer giả JW
   let seen;global.fetch=async(_u,opts)=>{seen=opts.headers;return mockResponse([]);};
   try {await table('procure_ai_requests',{select:'pr_id',limit:'1'});assert.equal(seen.apikey,'sb_secret_abc123');assert.equal(seen.Authorization,undefined);}
   finally {global.fetch=priorFetch;process.env.SUPABASE_SERVICE_ROLE_KEY=previous;process.env.SUPABASE_URL=url;process.env.SUPABASE_ANON_KEY=anon;}
+});
+
+test('V12: Backend AI restricts finance/department head/directory by stage and amount',()=>{
+ const base={branch_id:'HQ',department_id:'IT',status:'PENDING_DEPT',amount:15_000_000,owner_auth_uid:'another'};
+ assert.equal(canAnalyzeApproval(user('dept_head'),base),true);
+ assert.equal(canAnalyzeApproval(user('finance'),base),false);
+ assert.equal(canAnalyzeApproval(user('branch_director'),base),false);
+ assert.equal(canAnalyzeApproval(user('dept_head'),{...base,status:'PENDING_FINANCE'}),false);
+ assert.equal(canAnalyzeApproval(user('finance'),{...base,status:'PENDING_FINANCE'}),true);
+ assert.equal(canAnalyzeApproval(user('branch_director'),{...base,status:'PENDING_FINAL'}),true);
+ assert.equal(canAnalyzeApproval(user('bod'),{...base,status:'PENDING_FINAL'}),false);
 });

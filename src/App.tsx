@@ -28,7 +28,7 @@ import { AdminView } from './views/AdminView';
 import { ScenariosRunnerModal } from './views/ScenariosRunnerModal';
 
 const MainRouter: React.FC = () => {
-  const { isAuthenticated, activeScreen, toasts, dismissToast, currentUser, selectedPrId, purchaseRequests } = useApp();
+  const { isAuthenticated, activeScreen, toasts, dismissToast, currentUser, selectedPrId, purchaseRequests, delegations } = useApp();
   const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
 
   // Authentication screens
@@ -60,7 +60,7 @@ const MainRouter: React.FC = () => {
   // Kiểm tra quyền màn hình đồng nhất với sidebar và tầng dữ liệu.
   // Đây là RBAC phía frontend của prototype; backend thật vẫn phải xác thực mọi API.
   const forbidden = !canAccessScreen(currentUser, activeScreen) ||
-    (activeScreen === 'PR_DETAIL' && (!selectedPrId || !purchaseRequests.some(pr=>pr.id===selectedPrId && canReadRequest(currentUser,pr)))) ||
+    (activeScreen === 'PR_DETAIL' && (!selectedPrId || !purchaseRequests.some(pr=>pr.id===selectedPrId && canReadRequest(currentUser,pr,delegations)))) ||
     (activeScreen === 'PR_EDIT' && (!selectedPrId || !purchaseRequests.some(pr=>pr.id===selectedPrId && pr.status==='DRAFT' && pr.createdById===currentUser?.id)));
   if (forbidden) return <AppShell onOpenScenarioModal={() => setIsScenarioModalOpen(true)}><ForbiddenPage /></AppShell>;
 

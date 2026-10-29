@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { canAccessScreen, canViewAllRegions, primaryRole } from '../domain/rules';
+import { canAccessScreen, canViewAllRegions, canApproveStep, primaryRole } from '../domain/rules';
 import { formatVND, getPRStatusBadgeInfo } from '../utils/formatters';
 import { BudgetDistributionBar } from '../components/common/BudgetDistributionBar';
 import { Badge } from '../components/common/Badge';
@@ -23,7 +23,7 @@ const SummaryCard: React.FC<{ label: string; value: string; note: string; emphas
 );
 
 export const DashboardView: React.FC = () => {
-  const { currentUser, budgetPools, purchaseRequests, currentBranchScope, navigateTo } = useApp();
+  const { currentUser, budgetPools, purchaseRequests, currentBranchScope, navigateTo, delegations } = useApp();
   // Ưu tiên không gian Giám đốc nếu tài khoản được cấp quyền BOD.
   const financeWorkspace = primaryRole(currentUser)==='finance';
   const procurementWorkspace = primaryRole(currentUser)==='procurement';
@@ -49,7 +49,7 @@ export const DashboardView: React.FC = () => {
   const committed = scopedBudgets.reduce((s,b) => s + b.committed, 0);
   const used = scopedBudgets.reduce((s,b) => s + b.used, 0);
   const available = allocated - held - committed - used;
-  const pendingFinance = scopedPRs.filter(pr => pr.status === 'PENDING_FINANCE' && pr.createdById !== currentUser?.id);
+  const pendingFinance = scopedPRs.filter(pr => canApproveStep(currentUser, pr, delegations));
   const waitingFunds = scopedPRs.filter(pr => pr.status === 'WAITING_FUNDS');
 
   if (procurementWorkspace) {
@@ -167,7 +167,7 @@ export const DashboardView: React.FC = () => {
         <div className={card}>
           <h2 className="font-bold text-[#202039] mb-3">Đề nghị cần kiểm soát nguồn</h2>
           <div className="space-y-3">
-            {scopedPRs.filter(pr => ['PENDING_FINANCE','WAITING_FUNDS'].includes(pr.status)).slice(0,5).map(pr => {
+            {scopedPRs.filter(pr => canApproveStep(currentUser, pr, delegations)).slice(0,5).map(pr => {
               const state = getPRStatusBadgeInfo(pr.status);
               return <div className="flex items-center justify-between gap-3 text-xs py-2 border-b border-[#DDE0EA]" key={pr.id}>
                 <div><strong className="text-[#5540C7]">{pr.id}</strong><div className="text-[#62657A] max-w-[220px] truncate">{pr.title}</div></div>

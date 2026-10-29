@@ -5,7 +5,7 @@
  * Tuân thủ Design System: #5540C7, #F7F8FC, không gradient tối, phông Inter
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Button } from '../common/Button';
 import { Alert } from '../common/Alert';
@@ -18,6 +18,12 @@ export const LoginForm: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loginSlow, setLoginSlow] = useState(false);
+  useEffect(() => {
+    if(!isLoading){setLoginSlow(false);return;}
+    const timer=window.setTimeout(()=>setLoginSlow(true),3000);
+    return ()=>window.clearTimeout(timer);
+  },[isLoading]);
 
   const handleSubmit = async(e: React.FormEvent) => {
     e.preventDefault();setErrorMessage('');setIsLoading(true);
@@ -122,8 +128,11 @@ export const LoginForm: React.FC = () => {
               className="w-full mt-2"
               isLoading={isLoading}
             >
-              Đăng nhập hệ thống
+              {isLoading ? 'Đang xác thực tài khoản…' : 'Đăng nhập hệ thống'}
             </Button>
+            {isLoading && <p role="status" className="text-xs text-center text-[#62657A] mt-2">
+              {loginSlow ? 'Đang xác minh vai trò và phạm vi duyệt từ máy chủ, vui lòng kiểm tra kết nối mạng nếu quá lâu.' : 'Đang kết nối an toàn đến Supabase…'}
+            </p>}
           </form>
 
           <div className="text-xs rounded-[10px] bg-[#EBF2FF] text-[#2459AB] p-3 mt-4">

@@ -21,7 +21,10 @@ function saveToken(data:Token) {
 export function clearAuth(){liveToken=null;try{sessionStorage.removeItem(KEY);}catch{}}
 async function supa(path:string,body:unknown,access?:string){
   const {url,anon}=cfg();
-  const res=await fetch(`${url}${path}`,{method:'POST',headers:{'Content-Type':'application/json',apikey:anon,...(access?{Authorization:`Bearer ${access}`}:{})},body:JSON.stringify(body)});
+  const res=await fetch(`${url}${path}`,{method:'POST',headers:{'Content-Type':'application/json',apikey:anon,...(access?{Authorization:`Bearer ${access}`}:{})},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)}).catch(e=>{
+    if(e?.name==='TimeoutError')throw Error('Kết nối Supabase quá lâu (15 giây). Vui lòng thử lại.');
+    throw e;
+  });
   const data=await res.json().catch(()=>({}));
   if(!res.ok)throw Error(data.msg||data.error_description||data.message||'Lỗi xác thực từ máy chủ.');
   return data;
@@ -34,20 +37,38 @@ export async function getToken():Promise<string>{
 }
 async function api<T>(path:string,body?:unknown,method='POST'):Promise<T>{
   const token=await getToken();
-  const res=await fetch(path,{method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},...(method==='POST'?{body:JSON.stringify(body??{})}:{})});
+  const res=await fetch(path,{method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},...(method==='POST'?{body:JSON.stringify(body??{})}:{}),signal:AbortSignal.timeout(20000)}).catch(e=>{
+    if(e?.name==='TimeoutError')throw Error('Máy chủ xác minh quyền phản hồi quá lâu (20 giây). Vui lòng thử lại.');
+    throw e;
+  });
   const data=await res.json().catch(()=>({}));
   if(!res.ok)throw Error(data.error?.message||`Lỗi API (${res.status}).`);
   return data;
 }
 export async function signInReal(email:string,password:string):Promise<User>{
-  clearAuth();const token=await supa('/auth/v1/token?grant_type=password',{email,password});saveToken(token);
-  try{return await restoreRealUser();}catch(e){clearAuth();throw e;}
+  clearAuth();
+  // One app request instead of: browser -> Supabase Auth -> Vercel /me -> Supabase Auth -> profiles.
+  // Server validates the password with Supabase then returns the verified role and session together.
+  const res=await fetch('/api/auth/login',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email:email.trim(),password}),signal:AbortSignal.timeout(20000),
+  }).catch(e=>{
+    if(e?.name==='TimeoutError')throw Error('Máy chủ đăng nhập phản hồi quá lâu (20 giây). Vui lòng thử lại.');
+    throw e;
+  });
+  const body=await res.json().catch(()=>({}));
+  if(!res.ok)throw Error(body.error?.message||`Không thể đăng nhập (HTTP ${res.status}).`);
+  if(!body.session?.access_token||!body.session?.refresh_token||!body.profile?.id)
+    throw Error('Phiên đăng nhập không hợp lệ. Vui lòng thử lại.');
+  saveToken(body.session);
+  return body.profile as User;
 }
 export async function restoreRealUser():Promise<User>{
   const {profile}=await api<{profile:User}>('/api/ai/me',undefined,'GET');return profile;
 }
 export async function signOutReal(){
-  try{const t=await getToken();await supa('/auth/v1/logout',{},t);}catch{}finally{clearAuth();}
+  const token=readToken();clearAuth(); // Hủy phiên trên trình duyệt ngay, không chặn lần đăng nhập tiếp theo.
+  if(token?.access_token){try{await supa('/auth/v1/logout',{},token.access_token);}catch{}}
 }
 export async function aiCheckDraft(draft:DraftInput):Promise<InsightReport>{
   return (await api<{report:InsightReport}>('/api/ai/check',{draft,excludePrId:draft.excludePrId})).report;

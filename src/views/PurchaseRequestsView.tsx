@@ -14,7 +14,7 @@ import { canAccessScreen, canReadRequest, isRequesterRole } from '../domain/rule
 import { Plus, Search, Filter, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 
 export const PurchaseRequestsView: React.FC = () => {
-  const { purchaseRequests, currentBranchScope, navigateTo, currentUser } = useApp();
+  const { purchaseRequests, currentBranchScope, navigateTo, currentUser, delegations } = useApp();
   const requesterOnly = isRequesterRole(currentUser);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,10 +26,10 @@ export const PurchaseRequestsView: React.FC = () => {
   // Tập hồ sơ có quyền đọc là nguồn dữ liệu DUY NHẤT cho bảng, tab và tìm kiếm.
   // Với nhân viên đề nghị, quyền sở hữu theo ID người tạo được áp dụng trước mọi bộ lọc.
   const visiblePRs = useMemo(() => purchaseRequests.filter(pr =>
-    canReadRequest(currentUser, pr) &&
+    canReadRequest(currentUser, pr, delegations) &&
     (!requesterOnly || pr.createdById === currentUser?.id) &&
     (requesterOnly || currentBranchScope === 'ALL' || pr.branchId === currentBranchScope)
-  ), [purchaseRequests, currentUser, requesterOnly, currentBranchScope]);
+  ), [purchaseRequests, currentUser, delegations, requesterOnly, currentBranchScope]);
 
   // Filter & Search
   const filteredPRs = useMemo(() => {
@@ -69,7 +69,7 @@ export const PurchaseRequestsView: React.FC = () => {
   const paginatedPRs = filteredPRs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const tabs = [
-    { id: 'ALL', label: requesterOnly ? 'Đề nghị của tôi' : 'Đề nghị trong phạm vi', count: visiblePRs.length },
+    { id: 'ALL', label: requesterOnly ? 'Đề nghị của tôi' : 'Đề nghị được giao', count: visiblePRs.length },
     {
       id: 'PENDING',
       label: 'Đang chờ duyệt',
@@ -103,7 +103,7 @@ export const PurchaseRequestsView: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-[#202039] m-0">{requesterOnly ? 'Đề nghị của tôi' : 'Đề nghị mua sắm'}</h1>
           <p className="text-xs text-[#62657A] mt-1 m-0">
-            {requesterOnly ? 'Chỉ hiển thị các đề nghị do bạn tạo. Bạn có thể lập mới, lưu nháp và theo dõi kết quả.' : 'Quản lý toàn bộ vòng đời đề xuất mua sắm hàng hóa, vật tư và thiết bị nội bộ (UC-MS01..07)'}
+            {requesterOnly ? 'Chỉ hiển thị các đề nghị do bạn tạo. Bạn có thể lập mới, lưu nháp và theo dõi kết quả.' : 'Chỉ hiển thị đề nghị đang đến lượt bạn xử lý và đề nghị do bạn tạo.'}
           </p>
         </div>
         {canAccessScreen(currentUser, 'PR_CREATE') && <Button
