@@ -5,8 +5,9 @@
  * Tuân thủ chính xác Design System layout & spacing
  */
 
-import { canSeeBranch, canViewAllRegions, canViewDashboard, canAccessScreen, isRequesterRole, primaryRole } from '../../domain/rules';
-import React, { useState } from 'react';
+import { canSeeBranch, canViewAllRegions, canViewDashboard, canAccessScreen, primaryRole, canApproveStep } from '../../domain/rules';
+import { sidebarByRole, sidebarActiveScreen, type SidebarRole } from '../../navigation/sidebar';
+import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ActiveScreen, BranchCode } from '../../types';
 import {
@@ -38,14 +39,37 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     currentBranchScope,
     setBranchScope,
     notifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+    purchaseRequests,
+    delegations,
   } = useApp();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [notificationMenuOpen, setNotificationMenuOpen] = useState(false);
+  const notificationMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!notificationMenuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!notificationMenuRef.current?.contains(event.target as Node)) {
+        setNotificationMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setNotificationMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [notificationMenuOpen]);
 
   const role = primaryRole(currentUser);
   const requesterOnly = role === 'requester';
-  const unreadCount = requesterOnly ? 0 : notifications.filter(n=>!n.isRead).length;
+  const unreadCount = notifications.filter(n=>!n.isRead).length;
   interface NavItem { id: ActiveScreen; label: string; icon: React.ReactNode; badge?: number; visible:boolean; }
   const icons: Record<string, React.ReactNode> = {
     DASHBOARD:<LayoutDashboard className="w-4 h-4" />,
@@ -57,25 +81,18 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     EXECUTION_LIST:<ShoppingBag className="w-4 h-4" />,
     RECONCILIATION_IMPORT:<Receipt className="w-4 h-4" />,
     REPORTS:<BarChart3 className="w-4 h-4" />,
-    NOTIFICATIONS:<Bell className="w-4 h-4" />,
     ADMIN_MANAGEMENT:<Settings className="w-4 h-4" />,
   };
-  type NavSpec={id:ActiveScreen;label:string};
-  const navByRole:Record<string,{group:string;entries:NavSpec[]}> = {
-    requester:{group:'Đề nghị cá nhân',entries:[{id:'PR_LIST',label:'Đề nghị của tôi'},{id:'PR_CREATE',label:'Lập đề nghị'}]},
-    dept_head:{group:'Quản lý phòng ban',entries:[{id:'APPROVAL_QUEUE',label:'Hàng chờ duyệt của phòng'},{id:'PR_LIST',label:'Tra cứu đề nghị'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
-    finance:{group:'Tài chính – Ngân sách',entries:[{id:'PR_CREATE',label:'Lập đề nghị'},{id:'DASHBOARD',label:'Tổng quan ngân sách'},{id:'APPROVAL_QUEUE',label:'Kiểm tra nguồn ngân sách'},{id:'BUDGET_OVERVIEW',label:'Quản lý ngân sách'},{id:'BUDGET_TRANSFERS',label:'Điều chuyển nguồn'},{id:'PR_LIST',label:'Tra cứu đề nghị'},{id:'REPORTS',label:'Báo cáo ngân sách'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
-    procurement:{group:'Mua hàng',entries:[{id:'DASHBOARD',label:'Tổng quan mua hàng'},{id:'EXECUTION_LIST',label:'Tiếp nhận & Thực hiện'},{id:'PR_LIST',label:'Hồ sơ đã duyệt'},{id:'REPORTS',label:'Báo cáo mua hàng'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
-    accountant:{group:'Kế toán – Đối soát',entries:[{id:'DASHBOARD',label:'Tổng quan kế toán'},{id:'RECONCILIATION_IMPORT',label:'Nhập chứng từ & Đối soát'},{id:'PR_LIST',label:'Hồ sơ đã duyệt'},{id:'REPORTS',label:'Báo cáo kế toán'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
-    branch_director:{group:'Điều hành chi nhánh',entries:[{id:'PR_CREATE',label:'Lập đề nghị'},{id:'DASHBOARD',label:'Tổng quan chi nhánh'},{id:'APPROVAL_QUEUE',label:'Hàng chờ phê duyệt'},{id:'PR_LIST',label:'Đề nghị được phân quyền'},{id:'REPORTS',label:'Báo cáo chi nhánh'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
-    bod:{group:'Ban Giám đốc',entries:[{id:'PR_CREATE',label:'Lập đề nghị'},{id:'DASHBOARD',label:'Tổng quan toàn công ty'},{id:'APPROVAL_QUEUE',label:'Phê duyệt cấp cao'},{id:'PR_LIST',label:'Đề nghị được phân quyền'},{id:'BUDGET_OVERVIEW',label:'Giám sát ngân sách'},{id:'BUDGET_TRANSFERS',label:'Xét duyệt điều chuyển'},{id:'REPORTS',label:'Báo cáo toàn công ty'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
-    admin:{group:'Quản trị hệ thống',entries:[{id:'ADMIN_MANAGEMENT',label:'Tài khoản & Phân quyền'}]},
-  };
-  const spec = role ? navByRole[role] : undefined;
-  const navItems:{group:string;items:NavItem[]}[] = spec ? [{group:spec.group,items:spec.entries.map(({id,label})=>({
-    id,label,icon:icons[id]||<FileText className="w-4 h-4" />,badge:id==='NOTIFICATIONS'?unreadCount||undefined:undefined,
-    visible:canAccessScreen(currentUser,id),
-  }))}]:[];
+  const spec = role && role in sidebarByRole ? sidebarByRole[role as SidebarRole] : undefined;
+  const pendingApprovalCount = purchaseRequests.filter(pr => canApproveStep(currentUser, pr, delegations)).length;
+  const navItems:{group:string;items:NavItem[]}[] = spec ? [{
+    group:spec.group,
+    items:spec.entries.map(({id,label})=>({
+      id, label, icon:icons[id]||<FileText className="w-4 h-4" />,
+      visible:canAccessScreen(currentUser,id),
+      badge:id==='APPROVAL_QUEUE' && pendingApprovalCount>0 ? pendingApprovalCount : undefined,
+    })),
+  }] : [];
 
   const handleNavClick = (screen: ActiveScreen) => {
     navigateTo(screen);
@@ -127,7 +144,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                   {group.group}
                 </div>
                 {visibleItems.map((item) => {
-                  const isActive = activeScreen === item.id;
+                  const isActive = sidebarActiveScreen(activeScreen) === item.id;
                   return (
                     <button
                       key={item.id}
@@ -192,7 +209,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                         type="button"
                         onClick={() => handleNavClick(item.id)}
                         className={`w-full flex items-center justify-between px-3 py-2.5 rounded-[8px] text-sm ${
-                          activeScreen === item.id
+                          sidebarActiveScreen(activeScreen) === item.id
                             ? 'bg-[#F0EDFF] text-[#5540C7] font-semibold'
                             : 'text-[#62657A]'
                         }`}
@@ -248,72 +265,85 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
             </div>
           </div>
 
-          {/* Right Header Actions */}
+          {/* Right Header Actions: notifications live only in the header, not the sidebar. */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              type="button"
-              onClick={logout}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-[#F7F8FC] hover:bg-[#F0EDFF] border border-[#DDE0EA] text-xs font-semibold text-[#5540C7] cursor-pointer transition-colors"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Đăng xuất</span>
-            </button>
-
-            {/* Notification Bell - không có màn thông báo độc lập cho nhân viên đề nghị */}
-            {!requesterOnly && <button
-              type="button"
-              onClick={() => navigateTo('NOTIFICATIONS')}
-              className="relative p-2 rounded-[8px] text-[#62657A] hover:text-[#202039] hover:bg-[#F7F8FC] cursor-pointer"
-              aria-label="Xem thông báo"
-            >
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#B42336]" />
-              )}
-            </button>}
-
-            {/* Account Menu */}
-            <div className="relative">
+            {/* Notification bell is the ONLY navigation entry for notifications. */}
+            <div className="relative" ref={notificationMenuRef}>
               <button
                 type="button"
-                onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                className="flex items-center gap-2 p-1.5 rounded-[10px] hover:bg-[#F7F8FC] cursor-pointer transition-colors"
-                aria-expanded={accountMenuOpen}
+                onClick={() => setNotificationMenuOpen(open => !open)}
+                className="relative p-2 rounded-[8px] text-[#62657A] hover:text-[#202039] hover:bg-[#F7F8FC] cursor-pointer"
+                aria-label={unreadCount > 0 ? `Thông báo (${unreadCount} chưa đọc)` : 'Thông báo'}
+                aria-expanded={notificationMenuOpen}
+                aria-haspopup="dialog"
+                title="Thông báo"
               >
-                <div className="w-8 h-8 rounded-full bg-[#5540C7] text-white flex items-center justify-center font-bold text-xs">
-                  {currentUser?.name.charAt(0)}
-                </div>
-                <div className="hidden md:block text-left">
-                  <div className="text-xs font-bold text-[#202039] leading-tight">
-                    {currentUser?.name}
-                  </div>
-                  <div className="text-[10px] text-[#62657A] leading-tight">
-                    {currentUser?.roles[0]}
-                  </div>
-                </div>
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#B42336]" />
+                )}
               </button>
-
-              {accountMenuOpen && (
-                <div
-                  className="absolute right-0 mt-2 w-56 bg-white border border-[#DDE0EA] rounded-[12px] shadow-lg py-1.5 z-40 text-xs"
-                  onClick={() => setAccountMenuOpen(false)}
-                >
-                  <div className="px-4 py-2 border-b border-[#DDE0EA]">
-                    <div className="font-bold text-[#202039]">{currentUser?.name}</div>
-                    <div className="text-[#62657A] text-[11px]">{currentUser?.email}</div>
+              {notificationMenuOpen && (
+                <div role="dialog" aria-label="Thông báo" className="absolute top-full right-0 mt-2 w-[min(88vw,360px)] max-h-[70vh] overflow-hidden bg-white border border-[#DDE0EA] rounded-xl shadow-xl z-50">
+                  <div className="flex items-center justify-between gap-2 p-3 border-b border-[#DDE0EA]">
+                    <div className="font-bold text-sm text-[#202039]">Thông báo</div>
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={markAllNotificationsRead}
+                        className="text-xs font-semibold text-[#5540C7] hover:underline"
+                      >
+                        Đánh dấu đã đọc
+                      </button>
+                    )}
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={logout}
-                    className="w-full flex items-center gap-2 px-4 py-2.5 text-[#B42336] hover:bg-[#FDECEF] text-left cursor-pointer border-t border-[#DDE0EA]/60"
-                  >
-                    <LogOut className="w-4 h-4 text-[#B42336]" />
-                    <span>Đăng xuất an toàn</span>
-                  </button>
+                  <div className="overflow-y-auto max-h-[55vh] divide-y divide-[#DDE0EA]">
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-8 text-center text-sm text-[#62657A]">Chưa có thông báo.</div>
+                    ) : notifications.slice(0, 20).map((notification) => (
+                      <button
+                        key={notification.id}
+                        type="button"
+                        onClick={() => {
+                          markNotificationRead(notification.id);
+                          setNotificationMenuOpen(false);
+                          if (notification.targetPrId && canAccessScreen(currentUser, 'PR_DETAIL')) {
+                            navigateTo('PR_DETAIL', notification.targetPrId);
+                          }
+                        }}
+                        className={`w-full p-3 text-left hover:bg-[#F7F8FC] transition-colors ${notification.isRead ? '' : 'bg-[#F0EDFF]/40'}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-xs font-semibold text-[#202039]">{notification.title}</span>
+                          {!notification.isRead && <span className="w-2 h-2 mt-1 rounded-full bg-[#5540C7] shrink-0" />}
+                        </div>
+                        <p className="mt-1 text-xs text-[#62657A] line-clamp-2">{notification.message}</p>
+                        <span className="mt-1 block text-[10px] text-[#7B7D90]">{notification.createdAt}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
+
+            {/* Show the signed-in account, without an extra account-switch menu. */}
+            <div className="hidden md:flex items-center gap-2 min-w-0" aria-label="Tài khoản hiện tại">
+              <div className="w-8 h-8 rounded-full bg-[#5540C7] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                {currentUser?.name.charAt(0)}
+              </div>
+              <span className="text-xs font-semibold text-[#202039] truncate max-w-36">{currentUser?.name}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={logout}
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-[8px] bg-[#F7F8FC] hover:bg-[#F0EDFF] border border-[#DDE0EA] text-xs font-semibold text-[#5540C7] cursor-pointer transition-colors"
+              aria-label="Đăng xuất khỏi hệ thống"
+              title="Đăng xuất"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Đăng xuất</span>
+            </button>
           </div>
         </header>
 

@@ -19,6 +19,7 @@ export const AccountingReconciliationView: React.FC = () => {
     accountingBatches,
     importAccountingFile,
     commitAccountingBatch,
+    navigateTo,
     addToast,
   } = useApp();
 
@@ -83,6 +84,13 @@ export const AccountingReconciliationView: React.FC = () => {
           <input type="file" accept=".csv,text/csv" className="sr-only" onChange={e=>{const f=e.target.files?.[0]; if(f) void handleCSVImport(f); e.target.value='';}} />
         </label>
 
+      </div>
+
+      <div className="flex justify-end">
+        <button type="button" onClick={() => navigateTo('PR_LIST')}
+          className="text-sm font-semibold text-[#5540C7] hover:underline">
+          Tra cứu hồ sơ đã duyệt →
+        </button>
       </div>
 
       {/* Rules Banner */}

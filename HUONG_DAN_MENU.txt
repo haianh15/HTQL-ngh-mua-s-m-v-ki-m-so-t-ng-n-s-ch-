@@ -1,0 +1,24 @@
+PROCURE UI - CAP NHAT SIDEBAR THEO TUNG VAI TRO
+
+Chinh sua: 7 file (6 TS/TSX + 1 test). Khong can thay database hoac API Key.
+
+1) Giai nen ZIP vao mot thu muc rieng.
+2) Neu da cai Git, chay CAP_NHAT_MENU_GITHUB_WINDOWS.bat; xem git diff --stat truoc khi nhan Y.
+3) Neu khong co Git, mo repository GitHub, cap nhat lan luot 6 file trong src/ va them tests/sidebar.test.cjs; commit len main.
+4) Vercel se tu trien khai Production neu ket noi main. Doi trang thai Ready, Ctrl + Shift + R.
+5) Kiem tra 8 vai tro: menu chinh gon, thong bao chi o chuong, nut dang xuat o header.
+
+VAI TRO - MUC TRONG SIDEBAR
+- Nhan vien: De nghi cua toi. Lap de nghi trong trang danh sach.
+- Truong phong: Cho toi duyet; De nghi lien quan.
+- Tai chinh: Tong quan; Cho kiem tra; Ngan sach. Dieu chuyen nguon trong tab Ngan sach; Bao cao va lap de nghi qua Tong quan/Tra cuu.
+- Mua hang: Tong quan; Thuc hien mua sam. Tra cuu ho so tu trang Thuc hien.
+- Ke toan: Tong quan; Doi soat chung tu. Tra cuu va Bao cao tu trang chuc nang/Tong quan.
+- Giam doc chi nhanh: Tong quan; Cho toi duyet.
+- Ban giam doc: Tong quan; Cho toi duyet; Ngan sach.
+- Quan tri vien: Quan tri he thong (cac tab con trong trang).
+
+THONG BAO chi con o chuong tren cung. Dang xuat giu nguyen chuc nang Supabase.
+
+LUU Y: chi doi dieu huong tren giao dien, KHONG mo rong phan quyen hay bien app demo thanh van hanh that.
+Neu khong the push qua ket noi GitHub, dung giao dien GitHub hoac script Windows.

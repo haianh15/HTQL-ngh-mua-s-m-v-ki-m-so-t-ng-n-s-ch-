@@ -92,7 +92,10 @@ export const DashboardView: React.FC = () => {
             </tbody></table>
           </div>
         </div>
-        <Button variant="secondary" onClick={() => navigateTo('REPORTS')}>Xem báo cáo tiến độ mua hàng</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => navigateTo('PR_LIST')}>Tra cứu hồ sơ đã duyệt</Button>
+          <Button variant="secondary" onClick={() => navigateTo('REPORTS')}>Xem báo cáo tiến độ mua hàng</Button>
+        </div>
       </div>
     );
   }
@@ -106,6 +109,10 @@ export const DashboardView: React.FC = () => {
         <h1 className="text-2xl sm:text-3xl font-bold text-[#202039] mt-2">Tổng quan kế toán</h1>
         <p className="text-sm text-[#62657A] my-3">Theo dõi hóa đơn, cam kết chưa ghi nhận và khoản chi đã đối soát; không điều chuyển ngân sách hay đặt hàng.</p>
         <Button variant="primary" onClick={()=>navigateTo('RECONCILIATION_IMPORT')}>Nhập chứng từ &amp; đối soát</Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={() => navigateTo('PR_LIST')}>Tra cứu hồ sơ đã duyệt</Button>
+        <Button variant="secondary" onClick={() => navigateTo('REPORTS')}>Xem báo cáo kế toán</Button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryCard label="Cam kết chưa ghi nhận" value={formatVND(committed)} note="Đang chờ chứng từ hợp lệ" />
@@ -136,6 +143,7 @@ export const DashboardView: React.FC = () => {
         <div className="flex flex-wrap gap-2">
           {canAccessScreen(currentUser, 'APPROVAL_QUEUE') && <Button variant="primary" onClick={() => navigateTo('APPROVAL_QUEUE')} icon={<CheckSquare className="w-4 h-4" />}>Kiểm tra đề nghị ({pendingFinance.length})</Button>}
           {canAccessScreen(currentUser, 'BUDGET_OVERVIEW') && <Button variant="secondary" onClick={() => navigateTo('BUDGET_OVERVIEW')} icon={<PieChart className="w-4 h-4" />}>Quản lý ngân sách</Button>}
+          {canAccessScreen(currentUser, 'PR_LIST') && <Button variant="secondary" onClick={() => navigateTo('PR_LIST')}>Tra cứu đề nghị / Lập mới</Button>}
           {canAccessScreen(currentUser, 'REPORTS') && <Button variant="secondary" onClick={() => navigateTo('REPORTS')}>Báo cáo</Button>}
         </div>
       </div>

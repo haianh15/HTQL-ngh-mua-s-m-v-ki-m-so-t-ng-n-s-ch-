@@ -98,6 +98,13 @@ export const ProcurementExecutionView: React.FC = () => {
         </p>
       </div>
 
+      <div className="flex justify-end">
+        <button type="button" onClick={() => navigateTo('PR_LIST')}
+          className="text-sm font-semibold text-[#5540C7] hover:underline">
+          Tra cứu hồ sơ đã duyệt →
+        </button>
+      </div>
+
       {/* Info Callout */}
       <Alert variant="blue">
         <div className="flex items-start gap-2">

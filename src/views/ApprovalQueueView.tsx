@@ -145,6 +145,13 @@ export const ApprovalQueueView: React.FC = () => {
         </p>
       </div>
 
+      <div className="flex justify-end">
+        <button type="button" onClick={() => navigateTo('PR_LIST')}
+          className="text-sm font-semibold text-[#5540C7] hover:underline">
+          Tra cứu đề nghị liên quan →
+        </button>
+      </div>
+
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-[#DDE0EA] overflow-x-auto pb-px">
         <button
