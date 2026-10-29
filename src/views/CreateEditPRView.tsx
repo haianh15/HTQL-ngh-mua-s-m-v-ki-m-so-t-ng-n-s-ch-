@@ -521,19 +521,12 @@ export const CreateEditPRView: React.FC = () => {
               Chọn tài liệu từ máy tính
             </div>
             <div className="text-[11px] text-[#62657A] mb-3">
-              Demo lưu cục bộ PDF, Excel, Word hoặc ảnh tối đa 1MB/tệp; chưa tải lên máy chủ
+              Chức năng tiếp nhận tài liệu trực tuyến chưa được kích hoạt. Vui lòng gửi báo giá và chứng từ theo quy trình hiện hành.
             </div>
 
-            <label className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-[8px] bg-[#F0EDFF] text-[#5540C7] hover:bg-[#E4DDFB] cursor-pointer">
-              <span>{isUploading ? 'Đang tải lên...' : 'Chọn tệp đính kèm'}</span>
-              <input
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleSimulateUpload}
-                disabled={isUploading}
-              />
-            </label>
+            <span className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-[8px] bg-[#F7F8FC] text-[#62657A] border border-[#DDE0EA]" aria-disabled="true">
+              Đính kèm trực tuyến chưa khả dụng
+            </span>
           </div>
 
           {/* Danh sách tệp đã tải */}

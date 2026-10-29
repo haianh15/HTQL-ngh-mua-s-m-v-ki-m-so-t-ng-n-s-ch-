@@ -102,7 +102,7 @@ export type LiveState = {
 export async function getLiveState():Promise<LiveState>{
   const {state}=await api<{state:LiveState}>('/api/ops/state',undefined,'GET');
   if(!state||!Array.isArray(state.purchaseRequests)||!Array.isArray(state.budgetPools))
-    throw Error('Máy chủ chưa kích hoạt cơ sở dữ liệu nghiệp vụ V13. Không hiển thị dữ liệu demo.');
+    throw Error('Dịch vụ dữ liệu nghiệp vụ chưa sẵn sàng. Vui lòng liên hệ quản trị viên hệ thống.');
   return state;
 }
 export async function liveMutation(action:string,data:Record<string,unknown>):Promise<{ok:boolean;id?:string;status?:string}>{

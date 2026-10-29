@@ -1,15 +1,25 @@
-PROCURE UI V7 – HUONG DAN CAP NHAT
+PROCURE UI — CHỈNH GIAO DIỆN HIỂN THỊ CHUYÊN NGHIỆP
 
-1) TAI VA GIAI NEN ZIP. Giu nguyen cau truc thu muc src/... va tests/...
-2) Tren Windows da cai Git, chay CAP_NHAT_GITHUB_WINDOWS.bat de clone repository,
-   ghi de DUY NHAT nhung file co trong goi va git push nhanh main.
-3) Hoac thay tung file trong src/... vao dung duong dan tuong ung tren GitHub.
-4) Sau khi Vercel build thanh cong, dang xuat, Ctrl+Shift+R va dang nhap lai.
-5) Dung lan luot tai khoan mau cua 8 vai tro de xem menu va du lieu.
+Mục tiêu: loại bỏ cách diễn đạt dành cho bản mẫu khỏi giao diện hằng ngày.
+Giữ nguyên API, Supabase, Gemini, cơ sở dữ liệu, quy tắc phân quyền và quy trình mua sắm.
 
-LUU Y:
-- Khong thay the tat ca src, chi thay cac file trong ZIP.
-- Neu dang co chinh sua rieng tren GitHub, hay xem diff truoc khi ghi de.
-- Khong bao gio git push --force. Script khong tu thay doi cac file khac.
-- Day la frontend demo, khong phai backend phan quyen bao mat that.
-- Khong cam ket Vercel build da thanh cong: chua co dieu kien cai npm de build.
+Các thay đổi chính:
+- Xóa dải cảnh báo "CHẾ ĐỘ DEMO" và dòng "Design System · v1.0" ở sidebar.
+- Xóa nút/tính năng kịch bản mô phỏng dành cho kiểm thử.
+- Thay hướng dẫn đăng nhập mang tính kỹ thuật bằng câu ngắn gọn.
+- Loại bỏ nút nạp tệp kế toán mẫu; hướng dẫn nhập CSV có thật.
+- Khóa đúng các nút đính kèm/đổi mật khẩu chưa hoạt động, tránh báo thành công giả.
+- Giữ nhãn phân tích AI chính xác theo nguồn Gemini hoặc bộ quy tắc.
+- Đổi nhãn tra cứu ở cấp quản lý cho phù hợp phạm vi được phân quyền.
+
+CÁCH CẬP NHẬT (WINDOWS)
+1. Giải nén ZIP này.
+2. Nếu đã có Git for Windows, nhấp đúp CAP_NHAT_GITHUB_GIAO_DIEN.bat.
+3. Xem git diff --stat và chỉ nhấn Y khi đúng 12 file trong src/ đã sửa.
+4. Nếu chưa có Git, trên GitHub vào repository đang liên kết Vercel → Add file → Upload files, kéo thư mục src của bản này vào, xem đường dẫn và commit.
+5. Vercel Production sẽ tự redeploy sau commit GitHub nếu liên kết Git hoạt động.
+
+CẢNH BÁO QUAN TRỌNG:
+- Đổi nhãn giao diện KHÔNG khiến tính năng chưa triển khai trở thành tính năng thật.
+- Không chạy SQL, không thay đổi environment variables, không tải dữ liệu thật khi các nghiệp vụ chưa được kiểm thử tích hợp.
+- Website hiện tại chưa được cập nhật chỉ bởi việc tải ZIP.

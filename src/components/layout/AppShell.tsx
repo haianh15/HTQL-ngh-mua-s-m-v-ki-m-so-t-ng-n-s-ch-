@@ -9,7 +9,6 @@ import { canSeeBranch, canViewAllRegions, canViewDashboard, canAccessScreen, isR
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ActiveScreen, BranchCode } from '../../types';
-import { ChangePasswordModal } from '../auth/ChangePasswordModal';
 import {
   LayoutDashboard,
   FileText,
@@ -21,20 +20,16 @@ import {
   Bell,
   Settings,
   LogOut,
-  Key,
   Menu,
   X,
-  PlayCircle,
   Building2,
-  ChevronDown,
 } from 'lucide-react';
 
 interface AppShellProps {
   children: React.ReactNode;
-  onOpenScenarioModal: () => void;
 }
 
-export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModal }) => {
+export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   const {
     currentUser,
     activeScreen,
@@ -43,14 +38,10 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
     currentBranchScope,
     setBranchScope,
     notifications,
-    users,
-    switchUserDemo, addToast,
   } = useApp();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [isChangePwOpen, setIsChangePwOpen] = useState(false);
-  const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
 
   const role = primaryRole(currentUser);
   const requesterOnly = role === 'requester';
@@ -72,12 +63,12 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
   type NavSpec={id:ActiveScreen;label:string};
   const navByRole:Record<string,{group:string;entries:NavSpec[]}> = {
     requester:{group:'Đề nghị cá nhân',entries:[{id:'PR_LIST',label:'Đề nghị của tôi'},{id:'PR_CREATE',label:'Lập đề nghị'}]},
-    dept_head:{group:'Quản lý phòng ban',entries:[{id:'APPROVAL_QUEUE',label:'Hàng chờ duyệt của phòng'},{id:'PR_LIST',label:'Đề nghị của phòng'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
+    dept_head:{group:'Quản lý phòng ban',entries:[{id:'APPROVAL_QUEUE',label:'Hàng chờ duyệt của phòng'},{id:'PR_LIST',label:'Tra cứu đề nghị'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
     finance:{group:'Tài chính – Ngân sách',entries:[{id:'PR_CREATE',label:'Lập đề nghị'},{id:'DASHBOARD',label:'Tổng quan ngân sách'},{id:'APPROVAL_QUEUE',label:'Kiểm tra nguồn ngân sách'},{id:'BUDGET_OVERVIEW',label:'Quản lý ngân sách'},{id:'BUDGET_TRANSFERS',label:'Điều chuyển nguồn'},{id:'PR_LIST',label:'Tra cứu đề nghị'},{id:'REPORTS',label:'Báo cáo ngân sách'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
     procurement:{group:'Mua hàng',entries:[{id:'DASHBOARD',label:'Tổng quan mua hàng'},{id:'EXECUTION_LIST',label:'Tiếp nhận & Thực hiện'},{id:'PR_LIST',label:'Hồ sơ đã duyệt'},{id:'REPORTS',label:'Báo cáo mua hàng'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
     accountant:{group:'Kế toán – Đối soát',entries:[{id:'DASHBOARD',label:'Tổng quan kế toán'},{id:'RECONCILIATION_IMPORT',label:'Nhập chứng từ & Đối soát'},{id:'PR_LIST',label:'Hồ sơ đã duyệt'},{id:'REPORTS',label:'Báo cáo kế toán'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
-    branch_director:{group:'Điều hành chi nhánh',entries:[{id:'PR_CREATE',label:'Lập đề nghị'},{id:'DASHBOARD',label:'Tổng quan chi nhánh'},{id:'APPROVAL_QUEUE',label:'Hàng chờ phê duyệt'},{id:'PR_LIST',label:'Đề nghị chi nhánh'},{id:'REPORTS',label:'Báo cáo chi nhánh'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
-    bod:{group:'Ban Giám đốc',entries:[{id:'PR_CREATE',label:'Lập đề nghị'},{id:'DASHBOARD',label:'Tổng quan toàn công ty'},{id:'APPROVAL_QUEUE',label:'Phê duyệt cấp cao'},{id:'PR_LIST',label:'Đề nghị toàn công ty'},{id:'BUDGET_OVERVIEW',label:'Giám sát ngân sách'},{id:'BUDGET_TRANSFERS',label:'Xét duyệt điều chuyển'},{id:'REPORTS',label:'Báo cáo toàn công ty'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
+    branch_director:{group:'Điều hành chi nhánh',entries:[{id:'PR_CREATE',label:'Lập đề nghị'},{id:'DASHBOARD',label:'Tổng quan chi nhánh'},{id:'APPROVAL_QUEUE',label:'Hàng chờ phê duyệt'},{id:'PR_LIST',label:'Đề nghị được phân quyền'},{id:'REPORTS',label:'Báo cáo chi nhánh'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
+    bod:{group:'Ban Giám đốc',entries:[{id:'PR_CREATE',label:'Lập đề nghị'},{id:'DASHBOARD',label:'Tổng quan toàn công ty'},{id:'APPROVAL_QUEUE',label:'Phê duyệt cấp cao'},{id:'PR_LIST',label:'Đề nghị được phân quyền'},{id:'BUDGET_OVERVIEW',label:'Giám sát ngân sách'},{id:'BUDGET_TRANSFERS',label:'Xét duyệt điều chuyển'},{id:'REPORTS',label:'Báo cáo toàn công ty'},{id:'NOTIFICATIONS',label:'Thông báo'}]},
     admin:{group:'Quản trị hệ thống',entries:[{id:'ADMIN_MANAGEMENT',label:'Tài khoản & Phân quyền'}]},
   };
   const spec = role ? navByRole[role] : undefined;
@@ -111,7 +102,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
             procure<span className="text-[#5540C7]"> UI</span>
           </div>
           <div className="text-[10px] font-bold text-[#62657A] tracking-wider uppercase mt-0.5">
-            Design System · v1.0
+            Quản lý đề nghị mua sắm & ngân sách
           </div>
         </div>
 
@@ -167,17 +158,6 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
           })}
         </nav>
 
-        {/* Scenario Test Button */}
-        {role === 'bod' && <div className="p-3 border-t border-[#DDE0EA]">
-          <button
-            type="button"
-            onClick={onOpenScenarioModal}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold rounded-[8px] bg-[#F0EDFF] text-[#5540C7] hover:bg-[#E4DDFB] transition-colors cursor-pointer border border-[#DED7FA]"
-          >
-            <PlayCircle className="w-4 h-4" />
-            <span>Tình huống minh họa (A–G)</span>
-          </button>
-        </div>}
       </aside>
 
       {/* Mobile Drawer */}
@@ -270,43 +250,14 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Quick Demo Role Switcher button */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => { logout(); setRoleSwitcherOpen(false); }}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] bg-[#F7F8FC] hover:bg-[#F0EDFF] border border-[#DDE0EA] text-xs font-semibold text-[#5540C7] cursor-pointer transition-colors"
-              >
-                <span>Đổi tài khoản (đăng xuất)</span>
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-
-              {false && roleSwitcherOpen && (
-                <div
-                  className="absolute right-0 mt-2 w-72 bg-white border border-[#DDE0EA] rounded-[12px] shadow-lg py-2 z-40 text-xs"
-                  onClick={() => setRoleSwitcherOpen(false)}
-                >
-                  <div className="px-3 py-1 font-bold text-[#62657A] uppercase text-[10px] border-b border-[#DDE0EA] mb-1">
-                    Chế độ xem vai trò (đăng xuất để đổi):
-                  </div>
-                  {users.map((u) => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => addToast('Vui lòng đăng xuất và đăng nhập bằng tài khoản kiểm thử tương ứng.', 'info')}
-                      className={`w-full text-left px-3 py-2 hover:bg-[#F7F8FC] flex flex-col ${
-                        currentUser?.id === u.id ? 'bg-[#F0EDFF] font-semibold' : ''
-                      }`}
-                    >
-                      <span className="text-[#202039] font-medium">{u.name}</span>
-                      <span className="text-[11px] text-[#62657A]">
-                        {u.title} · {u.branchId}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={logout}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-[#F7F8FC] hover:bg-[#F0EDFF] border border-[#DDE0EA] text-xs font-semibold text-[#5540C7] cursor-pointer transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Đăng xuất</span>
+            </button>
 
             {/* Notification Bell - không có màn thông báo độc lập cho nhân viên đề nghị */}
             {!requesterOnly && <button
@@ -354,15 +305,6 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
 
                   <button
                     type="button"
-                    onClick={() => setIsChangePwOpen(true)}
-                    className="w-full flex items-center gap-2 px-4 py-2.5 text-[#202039] hover:bg-[#F7F8FC] text-left cursor-pointer"
-                  >
-                    <Key className="w-4 h-4 text-[#62657A]" />
-                    <span>Đổi mật khẩu tài khoản</span>
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={logout}
                     className="w-full flex items-center gap-2 px-4 py-2.5 text-[#B42336] hover:bg-[#FDECEF] text-left cursor-pointer border-t border-[#DDE0EA]/60"
                   >
@@ -375,19 +317,11 @@ export const AppShell: React.FC<AppShellProps> = ({ children, onOpenScenarioModa
           </div>
         </header>
 
-        <div role="status" className="px-4 lg:px-8 py-2 bg-[#FFF3D6] text-[#875000] text-xs border-b border-[#DDE0EA]">
-          <strong>CHẾ ĐỘ DEMO:</strong> Đăng nhập và API AI dùng máy chủ; dữ liệu mua sắm, giao dịch ngân sách trên giao diện vẫn là bản demo lưu cục bộ. MFA chưa được triển khai đầy đủ. Không nhập dữ liệu doanh nghiệp thật vào bản thử nghiệm.
-        </div>
         {/* Content Wrapper (Max 1280px, padding 32px desktop, 16px mobile) */}
         <main className="flex-1 max-w-[1280px] w-full mx-auto p-4 sm:p-6 lg:p-8">
           {children}
         </main>
 
-        {/* Change Password Modal */}
-        <ChangePasswordModal
-          isOpen={isChangePwOpen}
-          onClose={() => setIsChangePwOpen(false)}
-        />
       </div>
     </div>
   );

@@ -12,7 +12,7 @@ import { Alert } from '../common/Alert';
 import { Eye, EyeOff, Lock, Mail, ShieldAlert } from 'lucide-react';
 
 export const LoginForm: React.FC = () => {
-  const { login, navigateTo } = useApp();
+  const { login } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -44,7 +44,7 @@ export const LoginForm: React.FC = () => {
           Hệ thống Quản lý Đề nghị Mua sắm & Kiểm soát Ngân sách
         </div>
         <p className="mt-2 text-xs text-[#62657A]">
-          Áp dụng cho 01 Trụ sở chính & 05 Chi nhánh (600 CBNV)
+          Dành cho người dùng đã được cấp quyền truy cập
         </p>
       </div>
 
@@ -90,13 +90,7 @@ export const LoginForm: React.FC = () => {
                 <label htmlFor="login-password" className="block text-sm font-semibold text-[#202039]">
                   Mật khẩu <span className="text-[#B42336]">*</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={() => navigateTo('AUTH_FORGOT_PW')}
-                  className="text-xs font-semibold text-[#5540C7] hover:underline"
-                >
-                  Quên mật khẩu?
-                </button>
+
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#62657A]">
@@ -131,13 +125,13 @@ export const LoginForm: React.FC = () => {
               {isLoading ? 'Đang xác thực tài khoản…' : 'Đăng nhập hệ thống'}
             </Button>
             {isLoading && <p role="status" className="text-xs text-center text-[#62657A] mt-2">
-              {loginSlow ? 'Đang xác minh vai trò và phạm vi duyệt từ máy chủ, vui lòng kiểm tra kết nối mạng nếu quá lâu.' : 'Đang kết nối an toàn đến Supabase…'}
+              {loginSlow ? 'Đang xác minh vai trò và phạm vi duyệt từ máy chủ, vui lòng kiểm tra kết nối mạng nếu quá lâu.' : 'Đang xác thực thông tin…'}
             </p>}
           </form>
 
-          <div className="text-xs rounded-[10px] bg-[#EBF2FF] text-[#2459AB] p-3 mt-4">
-            <strong>Đăng nhập máy chủ:</strong> Dùng tài khoản đã được tạo trong Supabase Auth và được gán quyền tại bảng <code>procure_ai_profiles</code>. Mật khẩu demo cũ không còn hoạt động.
-          </div>
+          <p className="text-xs text-[#62657A] mt-4 text-center">
+            Nếu cần cấp lại mật khẩu, vui lòng liên hệ quản trị viên hệ thống.
+          </p>
         </div>
       </div>
     </div>

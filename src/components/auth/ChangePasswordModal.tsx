@@ -44,7 +44,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
     setTimeout(() => {
       setIsLoading(false);
       if (changePassword(currentPw, newPw)) onClose();
-      else setErrorMsg('Demo chưa có máy chủ xác thực, không thể đổi mật khẩu thật.');
+      else setErrorMsg('Đổi mật khẩu trực tuyến chưa khả dụng. Vui lòng liên hệ quản trị viên.');
     }, 400);
   };
 

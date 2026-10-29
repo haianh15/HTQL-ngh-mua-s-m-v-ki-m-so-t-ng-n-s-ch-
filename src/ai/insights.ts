@@ -92,7 +92,7 @@ export function analyzeDraft(draft: DraftInput, authorizedRequests: PurchaseRequ
   }));
   const total = draft.items.reduce((sum, i) => sum + (Number.isFinite(i.totalPrice) ? i.totalPrice : 0), 0);
   return {
-    headline: insights.some(i=>i.level==='warning') ? 'Có điểm cần người lập kiểm tra' : 'Không thấy cảnh báo bắt buộc trong bộ kiểm tra demo',
+    headline: insights.some(i=>i.level==='warning') ? 'Có điểm cần người lập kiểm tra' : 'Chưa phát hiện cảnh báo bắt buộc trong bộ quy tắc',
     details:[`${draft.items.length} hạng mục · tổng dự toán ${currency(total)}`, `Đã tìm ${similarities.length} hồ sơ tương tự trong phạm vi được phép xem.`],
     insights,
     limitations:'Phân tích minh họa bằng quy tắc, chưa kết nối mô hình AI. Không thay thế kiểm tra bắt buộc, không tự gửi hay từ chối hồ sơ.',
@@ -144,7 +144,7 @@ export function analyzeApproval(
     details:[`Người lập: ${pr.createdByName} · ${pr.departmentName}`, `Giá trị gồm thuế: ${currency(pr.totalAmount)} · ${pr.items.length} hạng mục`,
       `Ngày cần: ${pr.needByDate} · ${pr.attachments.length} tài liệu đính kèm`, `Trạng thái: ${pr.status} · phiên bản v${pr.currentVersion}`],
     insights,
-    limitations:'Chỉ là hỗ trợ đọc/đối chiếu theo quy tắc demo. Người duyệt chịu trách nhiệm quyết định; không có thao tác duyệt/từ chối tự động.',
+    limitations:'Đây là kết quả đối chiếu theo quy tắc, không phải quyết định phê duyệt. Người có thẩm quyền chịu trách nhiệm kiểm tra và phê duyệt.',
   };
 }
 

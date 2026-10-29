@@ -5,7 +5,7 @@
  * Quản lý đề nghị mua sắm và kiểm soát ngân sách nội bộ (1 Trụ sở, 5 Chi nhánh, 600 CBNV)
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import { canAccessScreen, canReadRequest } from './domain/rules';
 import { AppProvider, useApp } from './context/AppContext';
 import { AppShell } from './components/layout/AppShell';
@@ -25,11 +25,9 @@ import { AccountingReconciliationView } from './views/AccountingReconciliationVi
 import { ReportsView } from './views/ReportsView';
 import { NotificationsView } from './views/NotificationsView';
 import { AdminView } from './views/AdminView';
-import { ScenariosRunnerModal } from './views/ScenariosRunnerModal';
 
 const MainRouter: React.FC = () => {
   const { isAuthenticated, activeScreen, toasts, dismissToast, currentUser, selectedPrId, purchaseRequests, delegations } = useApp();
-  const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
 
   // Authentication screens
   if (!isAuthenticated) {
@@ -62,7 +60,7 @@ const MainRouter: React.FC = () => {
   const forbidden = !canAccessScreen(currentUser, activeScreen) ||
     (activeScreen === 'PR_DETAIL' && (!selectedPrId || !purchaseRequests.some(pr=>pr.id===selectedPrId && canReadRequest(currentUser,pr,delegations)))) ||
     (activeScreen === 'PR_EDIT' && (!selectedPrId || !purchaseRequests.some(pr=>pr.id===selectedPrId && pr.status==='DRAFT' && pr.createdById===currentUser?.id)));
-  if (forbidden) return <AppShell onOpenScenarioModal={() => setIsScenarioModalOpen(true)}><ForbiddenPage /></AppShell>;
+  if (forbidden) return <AppShell><ForbiddenPage /></AppShell>;
 
   // Authenticated In-App Screens
   const renderScreen = () => {
@@ -101,13 +99,9 @@ const MainRouter: React.FC = () => {
 
   return (
     <>
-      <AppShell onOpenScenarioModal={() => setIsScenarioModalOpen(true)}>
+      <AppShell>
         {renderScreen()}
       </AppShell>
-      <ScenariosRunnerModal
-        isOpen={isScenarioModalOpen}
-        onClose={() => setIsScenarioModalOpen(false)}
-      />
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </>
   );

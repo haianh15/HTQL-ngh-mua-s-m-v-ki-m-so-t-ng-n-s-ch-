@@ -12,7 +12,7 @@ import { formatVND } from '../utils/formatters';
 import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { Alert } from '../components/common/Alert';
-import { Receipt, Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle, ArrowRight } from 'lucide-react';
+import { Receipt, Upload, CheckCircle2, AlertTriangle, XCircle, ArrowRight } from 'lucide-react';
 
 export const AccountingReconciliationView: React.FC = () => {
   const {
@@ -61,67 +61,6 @@ export const AccountingReconciliationView: React.FC = () => {
     accountingBatches[0]?.id || null
   );
 
-  // Mẫu file kế toán giả lập cho kiểm thử
-  const handleLoadSampleBatch = async () => {
-    const sampleRows: AccountingImportRow[] = [
-      {
-        rowId: 1,
-        invoiceNo: 'INV-2026-8812',
-        prId: 'PR-2026-038',
-        budgetId: 'BG-2026-DN-TECH',
-        department: 'Phòng Kỹ thuật Đà Nẵng',
-        vendorName: 'Công ty CP Thiết bị Viễn thông Miền Trung',
-        amount: 8200000,
-        invoiceDate: '26/10/2026',
-        description: 'Hóa đơn thanh toán thiết bị mini OTDR theo PO-2026-DN-089',
-        validationStatus: 'VALID',
-        validationMessage: 'Khớp chính xác số đơn hàng PO và nguồn ngân sách.',
-      },
-      {
-        rowId: 2,
-        invoiceNo: 'INV-2026-8812', // Trùng số hóa đơn dòng 1
-        prId: 'PR-2026-038',
-        budgetId: 'BG-2026-DN-TECH',
-        department: 'Phòng Kỹ thuật Đà Nẵng',
-        vendorName: 'Công ty CP Thiết bị Viễn thông Miền Trung',
-        amount: 8200000,
-        invoiceDate: '26/10/2026',
-        description: 'Dòng nhập trùng lặp hóa đơn INV-2026-8812',
-        validationStatus: 'DUPLICATE',
-        validationMessage: 'Trùng lặp số hóa đơn với dòng 1 trong cùng tệp đối soát.',
-      },
-      {
-        rowId: 3,
-        invoiceNo: 'INV-2026-9045',
-        prId: 'PR-2026-041',
-        budgetId: 'BG-2026-HQ-TECH',
-        department: 'Phòng CNTT',
-        vendorName: 'Datadog Cloud Services Inc',
-        amount: 18000000,
-        invoiceDate: '27/10/2026',
-        description: 'Hóa đơn phần mềm bản quyền đám mây năm 2026',
-        validationStatus: 'VALID',
-        validationMessage: 'Khớp hồ sơ đã duyệt PR-2026-041.',
-      },
-      {
-        rowId: 4,
-        invoiceNo: 'INV-2026-9999',
-        prId: 'PR-2026-999', // Không tìm thấy
-        budgetId: 'BG-2026-HQ-TECH',
-        department: 'Phòng Vận hành',
-        vendorName: 'Công ty TNHH Ngoại Vực',
-        amount: 15000000,
-        invoiceDate: '28/10/2026',
-        description: 'Hóa đơn không rõ mã đề nghị mua sắm',
-        validationStatus: 'NOT_FOUND',
-        validationMessage: 'Mã đề nghị PR-2026-999 không tồn tại trên hệ thống.',
-      },
-    ];
-
-    const batchId = await importAccountingFile('Sao_ke_ke_toan_chi_phi_Q4_2026.xlsx', sampleRows);
-    setActiveBatchId(batchId);
-  };
-
   const currentBatch = accountingBatches.find((b) => b.id === activeBatchId);
 
   const handleCommit = (batchId: string) => {
@@ -143,13 +82,7 @@ export const AccountingReconciliationView: React.FC = () => {
           <Upload className="w-4 h-4"/> Nhập CSV kế toán
           <input type="file" accept=".csv,text/csv" className="sr-only" onChange={e=>{const f=e.target.files?.[0]; if(f) void handleCSVImport(f); e.target.value='';}} />
         </label>
-        <Button
-          variant="secondary"
-          onClick={()=>addToast('Dữ liệu mẫu đã tắt trong hệ thống thật. Vui lòng nhập CSV chứng từ thực tế.','warning')}
-          icon={<FileSpreadsheet className="w-4 h-4" />}
-        >
-          Nạp tệp đối soát mẫu thử nghiệm
-        </Button>
+
       </div>
 
       {/* Rules Banner */}
@@ -172,7 +105,7 @@ export const AccountingReconciliationView: React.FC = () => {
 
           {accountingBatches.length === 0 ? (
             <div className="p-4 text-center text-xs text-[#62657A] italic">
-              Chưa có tệp nào được nhập. Nhấn nút <strong>"Nạp tệp đối soát mẫu"</strong> ở trên để bắt đầu thử nghiệm.
+              Chưa có tệp đối soát. Chọn <strong>"Nhập CSV kế toán"</strong> để bắt đầu.
             </div>
           ) : (
             <div className="space-y-2">
@@ -310,11 +243,9 @@ export const AccountingReconciliationView: React.FC = () => {
                 Chưa chọn đợt đối soát
               </h3>
               <p className="text-xs text-[#62657A] max-w-sm mx-auto mb-4">
-                Nhấn vào nút "Nạp tệp đối soát mẫu thử nghiệm" để kiểm tra luồng phát hiện lỗi trùng lặp và đối soát chi phí tự động.
+                Chọn tệp CSV kế toán để kiểm tra hóa đơn, đối chiếu hồ sơ mua sắm và ghi nhận chi phí.
               </p>
-              <Button variant="primary" size="small" onClick={()=>addToast('Dữ liệu mẫu đã tắt trong hệ thống thật. Vui lòng nhập CSV chứng từ thực tế.','warning')}>
-                Nạp tệp mẫu ngay
-              </Button>
+
             </div>
           )}
         </div>

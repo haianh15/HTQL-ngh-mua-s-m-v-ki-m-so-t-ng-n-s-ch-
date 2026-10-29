@@ -7,7 +7,7 @@ export const InsightCard: React.FC<{ title: string; report: InsightReport; child
   <section className="bg-white border border-[#DDE0EA] rounded-[16px] p-5 space-y-4" aria-label={title}>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-[#5540C7]"/><h3 className="font-bold text-[#202039] text-base">{title}</h3></div>
-      <span className="bg-[#F0EDFF] text-[#5540C7] text-[11px] font-semibold rounded-[6px] px-2 py-1">{report.source === 'gemini' ? 'Gemini · phân tích trên máy chủ' : report.source === 'none' ? 'Chưa có dữ liệu để phân tích' : 'Demo theo quy tắc · chưa gọi mô hình AI'}</span>
+      <span className="bg-[#F0EDFF] text-[#5540C7] text-[11px] font-semibold rounded-[6px] px-2 py-1">{report.source === 'gemini' ? 'Gemini · phân tích trên máy chủ' : report.source === 'none' ? 'Chưa có dữ liệu để phân tích' : 'Đối chiếu theo quy tắc · không sử dụng Gemini'}</span>
     </div>
     <div className="text-sm font-semibold text-[#202039]">{report.headline}</div>
     <ul className="text-xs text-[#62657A] list-disc pl-5 space-y-1">{report.details.map((d,i)=><li key={i}>{d}</li>)}</ul>

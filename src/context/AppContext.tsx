@@ -306,11 +306,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     void signOutReal();
     setCurrentUser(null);setIsAuthenticated(false);setMfaPendingUser(null);
     setSelectedPrId(null);setActiveScreen('AUTH_LOGIN');
-    addToast('Đã đăng xuất khỏi phiên AI có xác thực.', 'info');
+    addToast('Bạn đã đăng xuất khỏi hệ thống.', 'info');
   };
 
   const switchUserDemo = (_userId: string) => {
-    addToast('Để đổi vai trò, vui lòng đăng xuất rồi đăng nhập tài khoản kiểm thử tương ứng.', 'warning');
+    addToast('Vui lòng đăng xuất, sau đó đăng nhập bằng tài khoản đã được phân quyền.', 'warning');
   };
 
   const requestPasswordReset = (email: string) => {
@@ -320,7 +320,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const changePassword = (_oldPw: string, _newPw: string) => {
     if (!currentUser) return false;
-    addToast('Bản demo chưa hỗ trợ đổi mật khẩu thật. Cần dịch vụ xác thực backend.', 'warning');
+    addToast('Đổi mật khẩu trực tuyến chưa khả dụng. Vui lòng liên hệ quản trị viên.', 'warning');
     return false;
   };
 
@@ -1483,7 +1483,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setTransfers(state.transfers||[]);setDelegations(state.delegations||[]);
       setNotifications(state.notifications||[]);setAuditLogs(state.auditLogs||[]);
       setAccountingBatches(state.accountingBatches||[]);
-    }).catch(error=>{if(!closed)addToast('Không tải được dữ liệu nghiệp vụ V13: '+(error as Error).message,'error');});
+    }).catch(error=>{if(!closed)addToast('Không tải được dữ liệu nghiệp vụ: '+(error as Error).message,'error');});
     return()=>{closed=true;};
   },[isAuthenticated,currentUser?.id]);
   const perform = async(action:string,data:Record<string,unknown>,successText?:string)=>{
